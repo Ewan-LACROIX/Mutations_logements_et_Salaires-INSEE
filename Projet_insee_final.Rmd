@@ -1,0 +1,2062 @@
+---
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+    includes:
+      in_header: preambule.tex
+    toc_depth: 5
+    number_sections: true
+fontsize: 11pt
+bibliography: ref.bib
+---
+\begin{titlepage}
+
+\vspace{1cm}
+\begin{center}
+
+\textit{Master Econométrie et Statistique Appliquée}
+
+2024-2025
+
+\vspace{5mm}
+
+\textsc{Projet d’étude Master 1 ESA (Insee – LEO)}
+
+\vfill 
+
+{\LARGE\bfseries Analyse économétrique des mutations immobilières et des salaires à un niveau territorial\par}
+
+\vfill
+
+\par
+\raisebox{-.5\height}{\includegraphics[width=5cm]{insee.png}}
+\par
+
+\vfill
+
+{\large\itshape Auteurs}
+
+{\large LACROIX Ewan}
+
+{\large KARAPETYAN Marieta}
+
+{\large NOËL Julien}
+
+{\large ROMAIN Canelle}
+
+\vspace{5mm}
+
+
+\par
+\raisebox{-.5\height}{\includegraphics[width=4cm]{esa.png}}
+\hfill
+\raisebox{-.5\height}{\includegraphics[width=5cm]{deg.jpg}}
+\par
+
+\end{center}
+\end{titlepage}
+
+
+\phantomsection
+
+
+\newpage
+
+\tableofcontents
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE)
+```
+
+```{r include=FALSE}
+library(arrow)
+library(tidyverse)
+library(plm)
+library(lmtest)
+library(modelsummary) 
+library(readxl)
+library(sf) 
+library(patchwork)
+library(corrplot)
+library(car)
+library(broom)
+library(knitr)
+library(pco)
+library(urca)
+library(tseries)
+library(knitr)
+library(vars)
+library(tsDyn)
+
+baseall=read_xlsx("tout_base100.xlsx")
+base = read_excel("base.xlsx")
+based = read_excel("base_diff2.xlsx")
+dep_geo <- st_read("contour-des-departements.geojson")
+map_df <- dep_geo %>% left_join(base, by = c("code" = "dep"))
+```
+
+\newpage
+
+# Introduction
+
+Dans l’actualité économique, le lien qui prône entre le marché immobilier et le niveau des salaires représente un sujet d’actualité de plus en plus exploré. Ce champ d’étude repose sur la conception d’une dynamique commune pour les territoires, plus précisément pour les zones dont les changements de propriétés se font de manière fréquente. Ce changement de propriétaire peut être l’œuvre d’une attractivité économique croissante, d’une mobilité affluente des résidents voire même d’une restructuration des liens socio-économiques. Dans le cadre de l’INSEE, l’objet de notre étude vise à analyser les relations entre le nombre de logements considérés par des changements de propriétaires et le niveau des salaires observé dans les zones d’emploi de la France.
+
+Cette étude pose le cadre d’un indicateur économique spécifique pour caractériser le marché immobilier : le nombre de logements ayant changé de propriétaires , cette analyse permet de capter l’intensité de la circulation essentielle sur un territoire au-delà des simples ventes de logements.
+
+L’idée fondamentale repose sur le fait que les transactions immobilières peuvent refléter une dynamique économique locale. Ces dynamismes peuvent être sous la forme de renforcement de l’attractivité des résidences ou même d’une allocation des ressources productives. À travers la mobilité des résidences qui surviennent, les mutations peuvent être révélatrices de phénomènes dits spatiaux ou même de sélection de capital humain, pour laquelle des travailleurs plus qualifiés migrent vers les zones les plus dynamiques (@glaeser2005urban).
+
+Notre projet sera constitué de plusieurs théories qui appuient le lien entre le marché de l’immobilier et les salaires locaux (@charruau2017d). Parmi celles-ci, nous pouvons citer l’article « Urban Decline and Durable Housing » de Glaeser et Gyourko montrant que les facteurs des prix immobiliers constituent une part influente de l’attractivité urbaine. Cette influence de l’attractivité urbaine structure les trajectoires des individus en matière d'emplois. De plus l’approche du capital spatial de Andersson et Klaesson nous démontre bien que les salaires sont fortement affectés par la structure géographique du logement et la proximité des bassins d’activité.
+
+Pour affiner notre analyse, il conviendra de justifier nos travaux d’un point de vue empirique prouvant que la structure des marchés immobiliers influence les inégalités salariales locales. Des travaux ont mis en évidence que la mobilité résidentielle peut générer des effets de relocalisation des ménages en fonction des opportunités économiques, ce qui pourrait accentuer les écarts salariaux entre les zones d’emplois (@doeringer2020internal). Un territoire se voudra attractif là où les transactions sont nombreuses et concentrera des opportunités professionnelles et des investissements économiques qui seront susceptibles de faire augmenter les salaires.
+
+C’est dans ce cadre que nous allons mobiliser des méthodologies d’économétrie spatiale en particulier le modèle SDM afin de modéliser les salaires comme une fonction des mutations immobilières. Ce choix de méthodologie permet de tenir compte des interactions géographiques entre les zones d’emploi et de distinguer les effets locaux et voisins de ces déterminants.
+La complexité des interactions entre les dynamiques immobilières et les niveaux de salaires met en lumière les profondes interdépendances entre le marché du logement, le marché du travail et la géographie économique. Cette ambivalence souligne la nécessité d’une lecture territorialisée des politiques publiques. Encourager les mutations dans certaines zones pourrait stimuler l’activité et les salaires, à condition de maîtriser les effets d’exclusion ou de diffusion vers d’autres territoires. En définitive, ce travail montre que les mutations immobilières ne sont pas de simples évènements locaux, mais qu’elles sont au cœur des recompositions socio-économiques locales. Mieux comprendre leur lien avec les salaires permettrait de guider les stratégies d’aménagement du territoire, de lutter contre les inégalités territoriales et de pilotage des politiques de logement et d’emploi.
+
+## Postulats initiaux
+
+Il est clair que les salaires ne sont pas uniquement déterminés par des facteurs individuels tels que le niveau de formation ou l'expérience professionnelle. Ils s’inscrivent dans un environnement territorial structuré par des dynamiques économiques, sociales et immobilières. Parmi ces dynamiques, les mutations immobilières, et en particulier le nombre de logements changeant de propriétaires, apparaissent comme un indicateur pertinent de l’attractivité et de la vitalité d’un territoire.
+Notre intuition initiale repose sur l’idée que dans les zones d’emploi où le marché immobilier est plus actif, c’est-à-dire là où les logements changent plus fréquemment de propriétaires, nous observons souvent une plus grande mobilité résidentielle, une recomposition démographique et potentiellement une demande plus forte de main-d’œuvre qualifiée. Ces éléments peuvent contribuer à tirer les salaires moyens vers le haut. Une telle dynamique pourrait être liée à des effets d’agglomération, à l’arrivée de populations à revenu plus élevé ou encore à une modernisation du tissu économique local.
+Cependant, cette intuition mérite d’être nuancée. Un nombre élevé de mutations peut également résulter d’un marché spéculatif, d’une rotation de population contrainte, ou d’un phénomène de gentrification, qui n’entraîne pas nécessairement une augmentation des salaires pour l’ensemble des travailleurs. De plus, dans les zones périphériques ou rurales, une hausse des mutations peut refléter une pression foncière sans véritable dynamique salariale, voire une fuite des travailleurs vers d’autres bassins d’emploi mieux rémunérés.
+Dès lors, il est légitime de se demander :
+
+•	les mutations immobilières agissent-elles comme un moteur ou comme un symptôme des écarts de salaires entre territoires ?
+
+•	les effets observés sont-ils strictement locaux, ou se diffusent-ils spatialement vers les zones voisines ?
+
+•	comment ces dynamiques interagissent-elles avec d'autres variables structurelles comme le taux de chômage ou la densité d’emploi ?
+
+Ce questionnement justifie le recours à une analyse économétrique formelle. Il ne s’agit pas uniquement d’identifier une corrélation globale entre mutations et salaires, mais d’étudier la manière dont cette relation varie dans le temps, et si des externalités territoriales positives ou négatives influencent les résultats.
+Enfin, cette réflexion s’inscrit dans un contexte plus large de mutations socio-économiques, où les inégalités territoriales de revenus tendent à se creuser, et où les politiques publiques s’attachent à rééquilibrer les dynamiques térritoriales. Une analyse fine et localisée des liens entre marché immobilier et salaires est donc indispensable pour mieux comprendre les ressorts de l’attractivité, et pour concevoir des politiques d’aménagement et d’emploi adaptées à chaque territoire.
+
+# Entrevue globale
+
+## Echelle nationale
+
+Tout au long de ce rapport, nous parlerons de *transactions* et de *mutations* pour faire référence au même indicateur : le nombre de logements changeant de propriétaire.
+
+Afin de mieux comprendre la relation entre le nombre de transactions immobilières et les niveaux de salaires annuels, cette section présente une analyse descriptive de ces variables. L’objectif est de dresser un portrait global des données dont nous disposons avant d'effecuer des analyses plus approfondies.
+
+Les statistiques descriptives permettent de mettre en évidence les tendances générales, les évolutions dans le temps ainsi que les éventuelles corrélations visuelles entre les variables.
+
+Les variables analysées à l'échelle nationale sur une période de 10 années sont :
+
+-   Le nombre de transactions immobilières (changements de propriétaire), indicateur de l’activité du marché.
+
+-   Le salaire net horaire moyen, représentatif du pouvoir d’achat des ménages.
+
+```{r echo=FALSE}
+stats_transactions=c(753733, 848317, 895588, 1025130, 1019282, 1073431, 1076405, 1251198, 1185805, 920562)
+df_salaires=read.csv("var_transfo/Sal_metropole.csv",sep=";",dec=",")
+colnames(df_salaires)<-c("id","SNHM","SNHMC","SNHMP","SNHME","SNHMO","SNHMF","SNHMFC","SNHMFP","SNHMFE","SNHMFO","SNHMH","SNHMHC","SNHMHP","SNHMHE","SNHMHO","SNHM18","SNHM26","SNHM50","SNHMF18","SNHMF26","SNHMF50","SNHMH18","SNHMH26","SNHMH50","annee")
+stats_salaires=df_salaires$SNHM
+
+# Créer le data frame combiné
+stats_df <- data.frame(stats_salaires, stats_transactions)
+summary=summary(stats_df)
+colnames(summary)<-c("salaires","transactions")
+# Afficher le résumé avec kable
+kable(summary, caption = "Statistiques des données")
+
+```
+
+Nous remarquons que les salaires sont regroupés entre 14.28 et 17.02 et que la médiane, de 15.10, suggère une légère asymétrie positive. De plus, 50% des salaires sont entre 14.60 et 16.19, ce qui n'est pas une grande dispersion.
+
+Pour les transactions, nous remarquons une variabilité du nombre de logements ayant changé de propriétaires oscillant entre 753 000 et 1 025 000, mais une grande partie restant autour des 900 000/1 000 000.
+
+Par des analyses statistiques plus approfondies présentes en annexe, nous pouvons identifier des différences de répartition des salaires par sexe, CSP et tranche d'âge.
+
+Le type de personnes qui ont les plus hauts salaires horaires sont les hommes cadres (25.90€/heure en moyenne).
+
+Nous remarquons que les hommes gagnent plus que les femmes (14.98€/heure contre 12.68€/heure en moyenne).
+
+Il apparaît que le salaire horaire augmente avec l'âge (9.978€/heure pour les 18/25 ans, puis 13.81€/heure pour les 26/49 ans, puis 16.23€/heure pour les plus de 50 ans).
+
+Toutes ces données sont très intéressantes pour avoir une idée des rémunérations et des écarts de salaires selon certaines catégories et certains critères.
+
+
+Nous pouvons représenter nos deux séries (les salaires et le nombre de transactions) graphiquement, ce qui nous donnera une idée plus claire sur le comportement de celles-ci.
+
+<p align="center">
+![Courbe salaire](images/courbe_sal.png){height=300px width=350px}
+</p>
+
+Nous constatons une tendance générale haussière des salaires horaires nets moyens sur la période. Toutefois, cette augmentation n'est pas linéaire et nous relevons une période de stagnation entre 2020 et 2021, coincidant avec la période de ralentissement économique et d'incertitude causée par le Covid. 
+
+<p align="center">
+![Courbe transactions](images/courbe_tran.png){height=220px width=350px}
+</p>
+
+Depuis 2014, le nombre de logements changeant de propriétaire a toujours été en hausse. Cependant, nous observons qu’il a fortement baissé les dernières années pour atteindre près de 900 000 en 2023, tandis que 2 ans plus tôt, en 2021, ce chiffre s’élevait à plus d’1,2 million. Une des explications de ce changement soudain est certainement la crise du Covid qui a crée une stagnation en 2020 puis ce pic en 2021. En effet, l'année 2020 n'a pas été fructueuse pour réaliser des transactions immobilières, car les gens sont restés chez eux à cause du confinement et donc leur priorité n'était pas de changer de logement. Nous pouvons aussi penser à la hausse du taux directeur pour expliquer les chiffres bas de 2023.
+
+<p align="center">
+![Courbes transactions](images/courbe_tran2.png){height=250px width=350px}
+</p>
+
+Chaque année, nous constatons une tendance d’évolution similaire. L'été semble être une période où il y a le plus de transactions, puis il y a une baisse marquée en août. Peut-être est-ce dû au fait que les administrations et les acheteurs sont en vacances durant ces périodes. Nous observons clairement un motif récurrent dans le marché immobilier. Nous remarquons une forte baisse en mars puis avril 2020 qui confirme que le marché de l'immobilier a fortement subi la crise pandémique. Globalement, le même schéma se répète chaque année sur le marché de l'immobilier.
+
+## Par départements
+
+Nous décidons maintenant de choisir l'année 2022 pour représenter géographiquement nos deux variables à l'échelle des départements puis des zones d'emploi. Le schéma géographique que nous observons est sensiblement le même pour toutes les années dont nous disposons et 2022 est une année récente et représentative.
+
+<p align="center">
+![Carte salaire departement](images/carte_sall.jpg){height=250px width=650px}
+</p>
+
+Sur cette carte, nous remarquons une homogénéité des salaires entre les départements. Cependant une zone se démarque en France : la région parisienne semble distinctement être un endroit où les salaires sont plus élevés que dans le reste de la France. 
+
+En effet, Paris, les Hauts-de-Seine et les Yvelines se démarquent par leurs salaires élevés. Cette zone offre de bonnes oportunités d'emploi, et accueille les sièges de la majorité des grandes entreprises, et accueille ainsi de nombreux cadres et professions mieux payées.
+
+<p align="center">
+![Carte transactions Departements](images/carte_dep_tran.png){height=250px width=350px}
+</p>
+
+Nous remarquons une toute autre répartition du côté du nombre de transactions. En effet, les départements dans lesquels les plus grandes villes françaises se trouvent témoignent de plus de transactions immobilières. Cela s'explique par le dynamisme de leur bassin d'emploi et leur tissu économique diversifié. Les zones qui se démarquent le plus sont : 
+
+-   la Côte d'Azur (Alpes-Maritimes et Bouches-du-Rhône), avec son climat attractif et son fort tourisme,
+
+-   la Gironde, avec son économie dynamique et sa qualité de vie,
+
+-   Paris et ses départements alentours, avec sa forte densité urbaine et son attractivité internationale
+
+-   le Nord, avec son marché immobilier dynamique, ce département étant un des plus peuplés de France.
+
+## Par zones d'emploi
+
+La représentation par zones d'emploi peut être un critère plus intéressant pour notre analyse géographique. En effet, d'après l'Insee, *une zone d’emploi est un ensemble de communes dans lequel la plupart des actifs résident et travaillent, et où les établissements peuvent trouver l’essentiel de leur main-d’œuvre*. Ce découpage du territoire capte plus efficacement les dynamiques économiques locales.
+
+<p align="center">
+![Carte ZE salaire](images/carte_ze_sal.png){height=300px width=400px}
+</p>
+
+Comme observé pour les départements, la région parisienne et ses alentours sont les lieux où les salaires nets horaires moyens sont les plus élevés en France. Les zones d'emploi de Versailles-Saint-Quentin, Paris, Seine-Yvelinoise, Rambouillet et Saclay se classent parmis celles proposant les plus hauts salaires, avec un salaire horaire net moyen supérieur à 20€/heure, bien supérieur à la moyenne.
+
+<p align="center">
+![Carte ZE transactions](images/carte_ze_tran.png){height=300px width=400px}
+</p>
+
+Désormais, à l'échelle des zones d'emploi, Paris se distingue très clairement par son nombre de transactions immobilières. Plus de 100 000 logements y ont changé de propriétaire en 2022, soit trois fois plus que le deuxième du classement : Lyon qui a suivi de Marseille, Toulouse et Bordeaux. La capitale confirme qu'elle est le coeur économique du pays avec une forte demande en logements. Malgré le fait que son offre immobilière soit limitée par le manque de place pour de nouvelle constructions, cela crée une forte rotation de par l'attractivité de ce territoire.
+
+## Conclusion
+
+L’analyse descriptive des deux variables étudiées, à savoir les salaires horaires moyens et le nombre de transactions immobilières, met en lumière un possible lien entre ces indicateurs économiques. Les résultats montrent que les zones où les niveaux de salaire sont plus élevés tendent également à présenter un volume plus important de transactions immobilières, surtout dans la région parisienne. Cette relation pourrait traduire l’influence du pouvoir d’achat sur la capacité des ménages à investir dans le logement.
+
+Par ailleurs, l’étude statistique des données révèle que des disparités salariales existent selon certains critères sociaux, ou bien géographiques. Les zones économiquement favorisées, souvent autour des grandes villes bénéficient d'une dynamique économique plus importante. Cela se traduit par un marché immobilier plus actif, compte tenu de la fréquence élevée de transactions. À l’inverse, dans les territoires où les salaires sont plus bas, nous observons généralement une plus faible intensité des transactions immobilières, signe d’une attractivité économique moins importante.
+
+Cependant, cette analyse reste descriptive et ne permet pas à elle seule d’établir des liens entre les variables ni de mesurer précisément l’impact des transactions immobilières sur les salaires ou inversement. De plus, d’autres facteurs économiques, démographiques ou réglementaires tels que les taux d’intérêt, l’offre de logement, ou encore la structure démographique locale peuvent également influencer la dynamique des transactions.
+
+C’est pourquoi il apparaît nécessaire de recourir à des modèles économétriques, afin d’isoler l’effet propre de chaque variable observée. L'estimation de ces modèles permettra de mieux comprendre la relation entre les salaires et le nombre de transactions immobilières et constitue une étape essentielle pour approfondir un possible lien dynamique ou géographique.
+
+\newpage
+
+# Dimension temporelle
+
+Dans un contexte où les données évoluent continuellement dans le temps, l'analyse en séries temporelles s'impose comme un outil essentiel pour mieux comprendre et modéliser les dynamiques entre les séries. Cette approche permet de révéler les dépendances temporelles, les tendances ou les changements soudains susceptibles d'affecter significativement l'interprétation des phénomènes étudiés.
+
+Dans cette partie, nous allons nous intéresser à la dimension temporelle de nos données afin de déceler l'existence d'une éventuelle dépendance dans le temps entre nos deux séries : le nombre de transactions et les salaires mensuels de base. Ces deux variables, dont nous pouvons soupçoner un lien économique potentiel, seront analysées sur la période du premier trimestre 2014 (T1 2014) au quatrième trimestre 2023 (T4 2023), soit un total de 40 observations trimestrielles pour cette modélisation temporelle.
+
+Il convient de noter que les salaires mensuels de base ne sont disponibles qu'à une fréquence mensuelle et qu'ils sont exprimés en base 100, ce qui ne permet donc pas de connaître les niveaux réels de rémunération.
+
+Enfin, toutes les séries seront exprimées en base 100 T1 2014 afin de garantir la cohérence et de faciliter les comparaisons et l'interprétation des évolutions au cours du temps.
+
+## Analyse de la stationnarité des séries
+
+Avant toute modélisation, il est nécessaire de vérifier la stationnarité de nos deux séries. Il est important qu'elles soient stationnaires car n'importe quelle régression linéaire sur des données temporelles non stationnaires donnerait lieu à une régression fallacieuse qui fausserait les résultats. Pour qu'une série soit stationnaire (faiblement), son espérance doit être constante au cours du temps, synonyme d'absence de tendance, sa variance doit également être constante et finie, et la covariance entre deux observations séparées d'un même écart temporel (lag) doit rester constante au fil du temps.
+
+Vérifier la stationnarité constitue ainsi une première étape essentielle de notre démarche analytique. Elle garantit la validité des analyses temporelles qui suivront, en s'assurant que les propriétés statistiques des séries restent stables dans le temps.
+
+Nous pourrons ensuite étudier de manière fiable la relation entre le nombre de transactions immobilières et l'évolution des salaires, et ainsi déterminer s'il existe un lien temporel significatif entre ces deux variables, et si oui, quel en est le délai d'ajustement.
+
+Nous commençons par une étude visuelle des séries en niveau :
+
+```{r,echo=FALSE,fig.show='hold' ,fig.width = 3.5, fig.height = 3}
+salaires=baseall$basesalaire
+transactions=baseall$basemutations
+plot(salaires,type="l")
+plot(transactions,type="l")
+```
+
+L’observation des représentations graphiques des séries en niveau met en évidence une tendance haussière marquée dans les deux cas : à la fois pour le nombre de transactions, qui traduit une hausse globale de l'activité immobilière et pour les salaires mensuels de base, qui représente la croissance progressive des salaires. Cette dynamique visuelle suggère déjà une non-stationnarité, puisque l’hypothèse de moyenne constante au cours du temps ne semble pas respectée.
+
+Afin d'observer l'effet d'une différenciation, nous représentons également les séries en différences premières :
+
+```{r,echo=FALSE,fig.show='hold' ,fig.width = 3.5, fig.height = 3}
+plot(diff(salaires),type="l")
+plot(diff(transactions),type="l")
+```
+
+Pour confirmer ces observations visuelles, nous avons réalisé une série de tests de stationnarité : KPSS (Kwiatkowski-Phillips-Schmidt-Shin), ADF (Augmented Dickey-Fuller) et PP (Phillips-Perron) dont voici les hypothèses :
+
+KPSS :
+
+$$\begin{cases}
+ H_0:\text{ La série est stationnaire} \\
+ H_1:\text{ La série n'est pas stationnaire}
+ \end{cases}$$
+
+ADF et PP :
+
+$$\begin{cases}
+ H_0:\text{ La série n'est pas stationnaire} \\
+ H_1:\text{ La série est stationnaire}
+ \end{cases}$$
+
+
+Résultats du test KPSS
+
+```{r eval=FALSE, include=FALSE}
+summary(ur.kpss(salaires,type="tau"))
+summary(ur.kpss(transactions,type="tau"))
+
+summary(ur.kpss(diff(salaires),type="tau"))
+summary(ur.kpss(diff(transactions),type="tau"))
+```
+
+```{r echo=FALSE}
+# Test KPSS en niveau
+kpss_salaires_niveau <- ur.kpss(salaires, type = "tau")
+kpss_transactions_niveau <- ur.kpss(transactions, type = "tau")
+
+# Test KPSS en différences premières
+kpss_salaires_diff <- ur.kpss(diff(salaires), type = "tau")
+kpss_transactions_diff <- ur.kpss(diff(transactions), type = "tau")
+
+results <- data.frame(
+  Série = c("Salaires (niveau)", "Transactions (niveau)",
+            "Salaires (diff)", "Transactions (diff)"),
+  `Statistique de test` = c(kpss_salaires_niveau@teststat,
+                            kpss_transactions_niveau@teststat,
+                            kpss_salaires_diff@teststat,
+                            kpss_transactions_diff@teststat),
+  `Valeur critique 5%` = c(kpss_salaires_niveau@cval[2],
+                           kpss_transactions_niveau@cval[2],
+                           kpss_salaires_diff@cval[2],
+                           kpss_transactions_diff@cval[2]),
+  `Stationnarité` = c(
+    ifelse(kpss_salaires_niveau@teststat > kpss_salaires_niveau@cval[2], "Non", "Oui"),
+    ifelse(kpss_transactions_niveau@teststat > kpss_transactions_niveau@cval[2], "Non", "Oui"),
+    ifelse(kpss_salaires_diff@teststat > kpss_salaires_diff@cval[2], "Non", "Oui"),
+    ifelse(kpss_transactions_diff@teststat > kpss_transactions_diff@cval[2], "Non", "Oui")
+  )
+)
+colnames(results) <- c("Série", 
+                       "Statistique de test", 
+                       "Valeur critique à 5%", 
+                       "Stationnarité")
+
+kable(results, caption = "Résultats du test KPSS (type = 'tau')", digits = 3)
+
+```
+
+Les résultats du test KPSS montrent que :
+
+-   En niveau, nous pouvons rejetter l'hypothèse nulle de stationnarité au seuil de 5% : les statistiques de test dépassent les valeurs critiques. Les séries sont donc non stationnaires.
+-   En différences premières, nous ne rejettons pas l'hypothèse nulle : les statistiques deviennent inféreieures aux valeurs critiques, ce qui signifie que les séries sont devenues stationnaires après différenciation. On dit qu'elles sont intégrées d'ordre 1, noté I(1).
+
+Les résultats des tests ADF et PP en annexe confirment globalement ces conclusions à une exception près :
+
+-   Le test PP confirme l'absence de stationnarité en niveau, puis la stationnarité après différenciation
+-   Le test ADF, quant à lui, ne permet pas de conclure à la stationnarité des séries après différenciation. Cette différence peut s'expliquer par la sensibilité du test ADF et par la taille limitée de notre échantillon (40 observations).
+
+Au final, compte tenu des résultats convergents des tests KPSS et PP et du caractère incertain du test ADF, nous retenons que les séries sont intégrées d'ordre 1 : I(1). Cela est typique des variables économiques et déterminant pour la suite de notre analyse car nous pourrons tester l'existence d'une relation de cointégration entre les deux séries.
+
+## Analyse de l'auto-corrélation
+
+Afin d’approfondir notre analyse temporelle, nous allons dans un premier temps examiner la structure de dépendance interne de chacune des deux séries à l’aide des fonctions d’autocorrélation (ACF) et d’autocorrélation partielle (PACF). Ces représentations graphiques permettent d’évaluer la persistance des effets dans le temps au sein d’une série donnée, en montrant comment chaque observation est corrélée à ses valeurs passées à différents retards (lags).
+
+La courbe ACF mesure la corrélation entre une variable et ses valeurs décalées, tandis que la PACF mesure la corrélation entre une variable et ses valeurs décalées après avoir supprimé l'effet des autres décalages. Ces outils sont particulièrement utiles pour détecter la présence d’une tendance, d’un effet de saisonnalité.
+
+Les graphiques des ACF et PACF des deux séries sont donc présentés ci-dessous afin d’évaluer visuellement leur comportement temporel et de détecter d’éventuelles structures d’autodépendance.
+
+```{r,echo=FALSE,fig.show='hold' ,fig.width = 3.5, fig.height = 3.3}
+acf(salaires)
+acf(transactions)
+```
+
+```{r,echo=FALSE,fig.show='hold' ,fig.width = 3.5, fig.height = 3.3}
+pacf(salaires)
+pacf(transactions)
+```
+
+Pour les salaires, npus remarquons que les valeurs précédentes ont un impact important sur les valeurs actuelles, ce qui montre que l'évolution de cette variable se fait de manière progressive, avec des effets qui s'étalent dans le temps, comme attendu pour des salaires. Cela peut s’expliquer par des ajustements progressifs dus à des négociations salariales. Le graphique PACF montre surtout une influence marquée du premier retard, ce qui signifie que l’effet d’un changement est immédiat, et s’estompe ensuite.
+
+Concernant les transactions, la dynamique semble un peu plus irrégulière. Nous observons une dépendance dans le temps, mais moins régulière que pour les salaires. Cela pourrait indiquer que les transactions réagissent plus fortement à des événements extérieurs comme les conditions de crédit par exemple. La PACF suggère que plusieurs retards peuvent jouer un rôle, pas seulement le premier, ce qui laisse penser que les effets mettent plus de temps à se diffuser.
+
+En résumé, les salaires montrent une évolution assez régulière et progressive dans le temps, tandis que les transactions semblent réagir de manière un peu plus variable et moins prévisible.
+
+## Cointégration et modélisation
+
+### Détection d'une cointégration
+
+Nous avions vérifié que les séries étaient bien I(1) et désormais une question fondamentale se pose : évoluent-elles ensemble dans le temps malgré leur non-stationnarité individuelle ? Existe-t-il une relation d’équilibre stable à long terme entre le nombre de transactions immobilières et les salaires mensuels de base ?
+
+C’est précisément l’objectif d’un test de cointégration : détecter si deux séries non stationnaires sont liées par une combinaison linéaire stationnaire. Bien qu'elles puissent suivre des trajectoires instables prises séparément, il est possible qu’elles entretiennent un lien structurel qui les ramène l'une vers l'autre au fil du temps.
+
+Pour répondre à cette problématique, nous réalisons un test de cointégration de Johansen (@johansen1991estimation), particulièrement adapté à un cadre multivarié. Ce test repose sur une représentation en modèle VAR (vector autoregressive) des séries en différences premières et permet d’estimer le rang de cointégration, c’est-à-dire le nombre de relations cointégrantes entre les séries. Deux statistiques principales sont utilisées : la trace et la valeur propre maximale, chacune testant des hypothèses successives sur le nombre de relations de cointégration.
+
+La réalisation de ce test constitue une étape essentielle dans notre démarche :
+
+-   En cas de cointégration, cela signifierait qu’un mécanisme d’ajustement à long terme lie nos deux séries, malgré des fluctuations de court terme. Cela justifierait alors l’estimation d’un modèle VECM (Vector Error Correction Model), capable de modéliser conjointement les dynamiques de court et long terme.
+
+-   En l’absence de cointégration, un simple VAR en différences pourrait être privilégié.
+
+Nous allons donc maintenant appliquer le test de la trace de Johansen afin de détecter la présence ou non d'une relation de cointégration entre nos deux variables économiques. Nous choisissons un lag de 2 pour éviter la surparamétrisation du modèle. C'est un lag suffisant compte tenu du faible nombre d'observations.
+
+Le test s'effectue en 2 étapes :
+
+-   $r\le1$ : L'hypothèse nulle est qu'il existe au plus une relation de cointégration.
+
+-   $r=0$ : L'hypothèse nulle est qu'il n'existe aucune relation de cointégration.
+
+```{r echo=FALSE}
+
+# Appliquer les tests Johansen avec les 3 types de deterministic terms
+j_none  <- ca.jo(data.frame(salaires,transactions), type="trace", K=2, ecdet="none", spec="longrun")
+j_const <- ca.jo(data.frame(salaires,transactions), type="trace", K=2, ecdet="const", spec="longrun")
+j_trend <- ca.jo(data.frame(salaires,transactions), type="trace", K=2, ecdet="trend", spec="longrun")
+
+# Hypothèses fixes (toujours 2 en bivarié)
+hypotheses <- c("$H_0 : r \\leq 1$", "$H_0 : r = 0$")
+
+# Fonction d'extraction
+get_stats <- function(j) {
+  stat <- round(j@teststat, 2)
+  crit <- j@cval[, "5pct"]
+  signif <- ifelse(stat > crit, "*", "")
+  paste0(stat, signif)
+}
+
+# Construire le tableau
+tab <- data.frame(
+  Hypothèse = hypotheses,
+  "Test sans constante ni trend" = get_stats(j_none),
+  "Test avec constante" = get_stats(j_const),
+  "Test avec trend" = get_stats(j_trend)
+)
+
+colnames(tab) <- c("Hypothèses", 
+                       "Test sans constante ni trend", 
+                       "Test avec constante", 
+                       "Test avec trend")
+
+# Afficher
+kable(tab, caption = "Test de cointégration de Johansen (test de trace au seuil de 5%)")
+
+```
+
+Il est important d'identifier le terme déterministe dans la relation cointégrante. Les résultats dépendent du traitement de ce terme déterministe. Ainsi, chacun des 3 modèles a été testé pour la présence d'une relation de long terme entre les variables, le premier sans terme déterministe, le second avec un terme constant et le dernier avec la présence d'une trend dans la relation cointégrante.
+
+-   Test sans constante ni trend : D'après ce test, dans un premier temps, nous ne rejettons pas l'hypothèse nulle qu'il y ait au plus une relation mais ensuite, nous ne rejettons pas l'hypothèse qu'il n'y ait pas de relation. Ainsi, il n'existe pas de relation de cointégration entre les variables si nous considérons l'abscence d'un terme déterministe.
+
+-   Test avec constante / Test avec trend : Ces 2 tests nous donnent les mêmes conclusions : il existe une relation de cointégration entre les 2 séries. En effet, dans un premier temps, nous ne rejettons pas l'hypothèse nulle qu'il y ait au plus une relation mais ensuite, nous rejettons l'hypothèse qu'il n'y ait pas de relation.
+
+Désormais, nous devons choisir parmis ces trois modèles lequel représente au mieux la relation entre nos séries. Tout d'abord, nous savons que le modèle sans constante ni trend est très restrictif et souvent peu probable lorsque nous observons des données réelles d'après Johansen. Nous ne choisirons pas ce modèle qui ne parvient pas à capter la relation entre nos variables car trop limité. Nous admettons donc la présence d'une relation cointégrante entre les deux séries, les deux autres modèles arrivant à déterminer une dynamique de long terme, nous devons choisir le plus pertinent au vu de nos séries. Le modèle avec trend serait justfiable économiquement. En effet, puisque nous observons une trend déterministe dans les séries en niveau des salaires et du nombre de transactions, il serait logique de penser qu'une trend déterministe pourrait être présente dans la relation qui les lie. Cependant, nous pouvons évoquer le Pantula Principle (@pantula1994comparison),comme appliqué dans cet article @sinha2023government . C'est une démarche académique de spécification de modèle. Cette approche propose de tester la présence de relation de cointégration dans le modèle le plus général : celui avec trend. Si ce test s'avère positif, nous testons ensuite le modèle avec constante seulement. De la même manière, si une relation est captée, nous testons le modèle sans constante ni trend. La finalité du Pantula Principle est de s'arrêter au modèle le plus simple qui arrive à détecter une relation cointégrante.
+
+D'après Pantula, le modèle avec constante est le modèle le plus simple qui suffit pour capter l'équilibre de long terme. Finalement, au vu des éléments, nous décidons de retenir le modèle avec constante dans l'équilibre, plus stable et moins complexe qu'un modèle avec trend dans l'équilibre.
+
+### Modélisation VECM
+
+Il est donc maintenant nécessaire de modéliser et d'estimer un modèle VECM, compte tenu de la relation de cointégration. Ce modèle s'écrit :
+
+$$
+\Delta Y_t = \alpha \beta' Y_{t-1} + \Gamma_1 \Delta Y_{t-1} + \cdots + \Gamma_{p-1} \Delta Y_{t-p+1} + \Theta D_t + \epsilon_t
+$$
+
+Avec :
+
+-   $\Delta Y_t$ le vecteur des premières différences des variables au temps $t$.
+-   $\alpha$ la matrice d'ajustement.
+-   $\beta'$ la transposée du vecteur de cointégration.
+-   $\beta' Y_{t-1}$ le terme de correction d'erreur, qui mesure le déséquilibre par rapport à la relation de long terme au temps $t-1$.
+-   $\Gamma_i$ les matrices de coefficients des différences retardées des variables.
+-   $\Theta D_t$ qui représente les termes déterministes (ici la constante).
+-   $\epsilon_t$ le vecteur des termes d'erreur.
+
+Dans notre cas, nous pouvons identifier les éléments de cette équation.
+
+```{r include=FALSE}
+vecm_model2 <- VECM(data.frame(salaires,transactions),lag=2,r=1,LRinclude="const",estim="ML")
+summary(vecm_model2)
+```
+
+Nous estimons les coefficients de la relation de cointégration (le vecteur $\beta$ ). Ils indiquent la combinaison linéaire des variables qui est stationnaire à long terme, normalisée à 1. Cette relation s'écrit :
+
+$$
+\beta = \begin{pmatrix}
+1.00 \\
+-0.4697 \\
+-57.3551
+\end{pmatrix}
+$$
+
+Nous pouvons écrire l'équation de cointégration telle que :
+
+$$
+1.00 \times \text{salaires} - 0.4697 \times \text{transactions} = 57.3551 \times \text{const}
+$$
+
+Puis :
+
+$$
+\text{salaires} = 0.4697 \times \text{transactions} + 57.3551
+$$
+
+Ainsi, une augmentation des transactions immobilières en base 100 de 1 unité est associée à une augmentation de 0.4697 unité des salaires mensuels de base en base 100 à long terme, en tenant compte de la constante.
+
+Le modèle VECM estimé se présente comme :
+
+```{r include=FALSE}
+vecm_model2 <- VECM(data.frame(salaires,transactions),lag=2,r=1,LRinclude="const",estim="ML")
+summary(vecm_model2)
+```
+
+\begin{align*}
+\Delta \text{salaires}_t &= -0.0158^{*} \cdot \text{ECT}
++ 0.1981 \cdot \Delta \text{salaires}_{t-1} \\
+&\quad - 0.0129^{*} \cdot \Delta \text{transactions}_{t-1} 
++ 0.3459 \cdot \Delta \text{salaires}_{t-2} 
+- 0.000043 \cdot \Delta \text{transactions}_{t-2}
+\end{align*}
+\begin{align*}
+\Delta \text{transactions}_t &= -0.1556 \cdot \text{ECT}
++ 0.5289 \cdot \Delta \text{salaires}_{t-1} \\
+&\quad - 0.1706 \cdot \Delta \text{transactions}_{t-1} 
+- 6.7337 \cdot \Delta \text{salaires}_{t-2} 
+- 0.6846^{*} \cdot \Delta \text{transactions}_{t-2}
+\end{align*}
+
+Avec \* qui distingue les coefficients statistiquement significatifs au seuil de 5%.
+
+L’analyse du modèle VECM met en évidence plusieurs éléments d’interprétation statistiquement significatifs et d'autres non.
+
+La matrice des poids, appelée matrice d'ajustement (la matrice $\alpha$ ), qui représente les forces de rappel et mesure la vitesse à laquelle chaque variable s'ajuste pour revenir à la relation d'équilibre de long terme, s'écrit :
+
+$$
+\alpha = \begin{pmatrix}
+-0.0158 \\
+-0.1556
+\end{pmatrix}
+$$
+
+Seul le coefficient associé à la variable des salaires est significatif à 5 %.
+
+Le coefficient de -0.0158 signifie qu'en cas de déséquilibre par rapport à la relation de long terme, les salaires tendent à s'ajuster lentement pour revenir à l'équilibre. Le déséquilibre suite à une déviation de la relation de long terme est corrigé d'environ 1.58% par période. Le temps nécessaire pour corriger 50% de cet écart peut être calculé par cette formule : $(1-0.0158)^{t}=0.5$ donc $t\approx43.6$. Il faut environ 44 périodes pour que les salaires corrigent 50% de l'écart, ce qui est particulièrement lent.
+
+A l'inverse, bien que le coefficient d'ajustement sur les transactions soit plus fort (15.56%), il n'est pas significatif, ce qui empêche de conclure qu'il revient activement vers l'équilibre. S'il avait été significatif, nous aurions pu calculer le temps nécessaire pour corriger 50% de cet écart : $(1-0.1556)^{t}=0.5$ donc $t\approx4.1$. Il aurait fallu environ 4 périodes aux transactions pour corriger 50% de l'écart. Cela aurait été un résultat cohérent. Cependant, ce n'est pas statistiquement significatif et donc pas fiable donc nous ne pouvons pas prendre en compte ce résultat.
+
+Dans la première équation, celle des salaires, seuls le terme de correction d'erreur et les transactions en $t-1$ sont significatifs à 5%. Le coefficient de −0.0129 indique que les variations passées du nombre de transactions ont un effet légèrement négatif sur les variations actuelles des salaires. Ce résultat est économiquement surprenant : nous nous attendions à ce que les transactions n'influencent pas les salaires, simplement car nous pensions que les salaires étaient plus exogènes dans cette relation. Mais en plus, le fait que ce coefficient soit négatif ne semble pas cohérent avec les théories économiques, un marché immobilier dynamique s'accorderait logiquement avec une hausse des salaires. Le fait que ce soit l'inverse est peut-être dû à des facteurs spécifiques au contexte économique ou par l'influence d'autres variables non prises en compte dans le modèle.
+
+Dans la seconde équation, celle des transactions, seul le coefficient des transactions en $t-1$ ressort significatif. Le coefficient négatif de −0.6846 suggère une forme d’effet de correction : une hausse des transactions deux périodes plus tôt est suivie d’une baisse. Ce type de dynamique sur le marché de l'immobilier est cohérent. En effet, pour rappel, lorsque nous avions représenté la série en niveau, nous observions une grande volatilité des observations qui oscillaient sans cesse. Aucun effet significatif des salaires passés sur les transactions n’a été détecté, ce qui affaiblit l’hypothèse selon laquelle les revenus influenceraient directement et immédiatement le nombre d’échanges immobiliers à court termes. Cette absence de lien significatif peut refléter une complexité plus forte du comportement d’achat, influencé par le crédit, la confiance des ménages ou la politique publique.
+
+L’analyse de cointégration s’est révélée essentielle pour mettre en évidence l’existence d’une relation de long terme entre les variables étudiées, mais ne semble pas concluante quant aux ajustements de court terme entre les variables. La procédure de Johansen a permis d’identifier une combinaison linéaire stable entre elles, indiquant une relation d’équilibre structurelle.
+
+Cette approche présente plusieurs avantages :
+
+-   Compréhension des relations économiques fondamentales : La cointégration révèle l’existence de mécanismes économiques qui lient les variables sur le long terme.
+
+-   Prévention de régressions fallacieuses : En tenant compte de la non-stationnarité des séries, nous évitons des inférences erronées issues de régressions sur des données non stationnaires.
+
+-   Modélisation des ajustements dynamiques : Le modèle VECM qui découle de cette relation permet d’analyser non seulement l’équilibre de long terme, mais aussi la manière dont les variables réagissent à court terme pour corriger les écarts à cet équilibre.
+
+Ainsi, l’existence d’une relation de cointégration entre les salaires et les transactions suggère qu’un équilibre économique structurel lie ces deux variables. Le modèle VECM issu de cette analyse fournit une base pour étudier leurs interactions dynamiques dans le temps, même si l'ajout d'autres variables expliquerait sans doute mieux cette relation.
+
+## Vérification des résidus du modèle
+
+```{r include=FALSE}
+jo_test <- ca.jo(data.frame(salaires,transactions), type="trace", K=2, ecdet="const", spec="transitory")
+vecm_model2 <- VECM(data.frame(salaires,transactions),lag=2,r=1,LRinclude="const",estim="ML")
+vecm <- cajorls(jo_test, r = 1)
+var = vec2var(jo_test, r = 1)  # transforme en modèle VAR restreint (VECM)
+residus_vecm = residuals(vecm_model2)
+```
+
+Afin de garantir la valité des résultats précédents, il est nécessaire que les hypothèses classiques soient respectées. Ainsi, nous avons réalisé une série de tests sur les résidus du modèle.
+
+### Autocorrélation des résidus
+
+Les résidus doivent être non autocorrélés pour respecter les hypothèses.
+
+Nous pouvons représenter les fonctions d'autocorrélation des résidus de chaque variable.
+
+```{r,echo=FALSE,fig.show='hold' ,fig.width = 3.4, fig.height = 3}
+acf(residus_vecm[,1], main = "ACF des résidus - variable salaires")
+acf(residus_vecm[,2], main = "ACF des résidus - variable transactions")
+```
+
+Graphiquement, il semble évident que les résidus ne sont pas corrélés. Afin de confirmer cette intuition, le test de Portmanteau (Ljung-Box) a été réalisé. Ses hypothèses sont :
+
+$$\begin{cases}
+ H_0:\text{ Les résidus ne sont pas autocorrélés} \\
+ H_1:\text{ Les résidus sont autocorrélés}
+ \end{cases}$$
+
+```{r eval=FALSE, include=FALSE}
+serial.test(var, lags.pt = 15, type = "PT.asymptotic")
+```
+
+```{r echo=FALSE}
+# Test d'autocorrélation
+serial_result <- serial.test(var, lags.pt = 15, type = "PT.asymptotic")
+serial_pvalue <- serial_result$serial$p.value
+
+knitr::kable(
+  data.frame(
+    Test = "Portmanteau (autocorrélation)",
+    `p-value` = round(serial_pvalue, 4)
+  ),
+  caption = "Résultat du test d’autocorrélation des résidus"
+)
+
+```
+
+Nous concluons donc que le test ne détecte pas d’autocorrélation significative dans les résidus du modèle. Cela indique que la dynamique temporelle du VECM capture correctement les dépendances présentes dans les données.
+
+### Hétéroscédasticité des résidus
+
+Les résidus doivent être homoscédastiques pour respecter les hypothèses.
+
+Nous avons réalisé le test ARCH qui va tester la présence d'homoscédasticité conditionnelle dans le modèle. Ses hypothèses sont :
+
+$$\begin{cases}
+ H_0:\text{ Pas d'effet ARCH -> variance constante des résidus} \\
+ H_1:\text{ Effet ARCH -> variance des résidus dépendante du passé}
+ \end{cases}$$
+
+
+```{r eval=FALSE, include=FALSE}
+arch.test(var, lags.multi = 10, multivariate.only = TRUE)
+```
+
+```{r echo=FALSE}
+# Test ARCH
+arch_result <- arch.test(var, lags.multi = 10, multivariate.only = TRUE)
+arch_pvalue <- arch_result$arch.mul$p.value
+
+knitr::kable(
+  data.frame(
+    Test = "ARCH (hétéroscédasticité)",
+    `p-value` = round(arch_pvalue, 4)
+  ),
+  caption = "Résultat du test d’hétéroscédasticité (ARCH)"
+)
+
+```
+
+La variance des résidus est bien constante.
+
+### Normalité des résidus
+
+Concernant la distribution des résidus, il est idéal qu'ils suivent une loi Normale mais pas nécessaire. Nous avons effectué un test de normalité dont voici les hypothèses:
+
+$$\begin{cases}
+ H_0:\text{ Les résidus suivent une distribution normale} \\
+ H_1:\text{ Les résidus ne suivent pas une distribution normale}
+ \end{cases}$$
+
+```{r eval=FALSE, include=FALSE}
+normality.test(var)
+```
+
+```{r echo=FALSE}
+# Test de normalité
+normality_result <- normality.test(var)
+
+# Extraction propre de la p-value principale (JB test global)
+normality_pvalue <- tryCatch({
+  as.numeric(normality_result$jb.mul$JB$p.value)
+}, error = function(e) NA)
+
+# Création du tableau
+knitr::kable(
+  data.frame(
+    Test = "Normalité (Jarque-Bera multivarié)",
+    `p-value` = ifelse(is.na(normality_pvalue),
+                       "Non disponible",
+                       formatC(normality_pvalue, format = "e", digits = 2))
+  ),
+  caption = "Résultat du test de normalité des résidus"
+)
+
+```
+
+Ce test conclut à la non-normalité des résidus. Cela n'est pas forcément problématique pour l'interprétation du modèle VECM car il reste robuste face à un non-respect de l'hypothèse de normalité.
+
+Ainsi, les hypothèses essentielles du modèle semblent globalement respectées, ce qui garantit la validité des conclusions tirées.
+
+## Analyse des Fonctions de Réponse Impulsionnelle (IRF)
+
+Afin de compléter l’analyse du modèle VECM, il est pertinent d’étudier les fonctions de réponse impulsionnelle ou Impulse Response Functions (IRF). Ces fonctions permettent de mieux comprendre la dynamique temporelle du système, en examinant comment un choc exogène sur une variable se propage et affecte les autres variables du modèle au fil du temps. Les IRF fournissent des éléments précieux sur la structure de transmission des chocs dans le système, en mettant en évidence la direction de l’effet (positif ou négatif) ou sa durée dans le temps.
+
+Les IRF permettent de simuler l’effet d’un choc unitaire imprévu (par exemple une hausse soudaine des salaires mensuels de base) sur les autres variables du système (ici le nombre de transactions immobilières) et d’observer la trajectoire de réaction sur un horizon donné. Cette trajectoire indique si l’effet est transitoire ou persistant, s’il est amplifié ou atténué, et si le système revient rapidement ou non à son équilibre de long terme.
+
+Pour notre analyse, les IRF ont été calculées à partir du modèle VECM transformé en VAR restreint, sur un horizon de 10 périodes. Les intervalles de confiance à 95 % ont été estimés par la méthode bootstrap, permettant ainsi d’évaluer la significativité des réponses. Les graphiques qui en résultent représentent pour chaque paire (impulsion → réponse) l’effet dynamique du choc, avec les bandes de confiance qui encadrent l’incertitude de l’estimation.
+
+```{r echo=FALSE, fig.align='center', fig.height=4.2, fig.width=7}
+irf1 <- irf(var, impulse = NULL, response = NULL, n.ahead = 10, ortho = TRUE, cumulative = FALSE, boot = TRUE, ci = 0.95, runs = 100, seed = NULL)
+plot(irf1)
+```
+
+Le premier graphique représente la réponse des 2 variables si un choc se produit sur les salaires. La réponse de salaires à son propre choc semble très faible voir nulle, tout comme la réponse du nombre de transactions. Ainsi, un choc sur les salaires n'impacterait aucune variable.
+
+Le second graphique représente la réponse des 2 variables si un choc se produit sur les transactions. La réponse des salaires est, cette fois encore, très faible voir nulle. La réponse de transactions à son propre choc laisse apparaître un coefficient positif qui traduirait un effet du choc. Cependant, après un effet immédiat et fort après deux périodes, l'intervalle de confiance de ces estimations contient 0, ce qui indiquerait la fragilité de ces estimations.
+
+L'analyse des IRF montre que globalement, aucun choc exogène sur les variables n'a d'impact important sur le modèle. Malgré le fait que nous observons des réponses dynamiques, elle sont statistiquement incertaines et nous ne pouvons pas les considérer comme significatives.
+
+Ainsi, bien que les variables soient liées à long terme comme nous l'avons constaté précédemment via l'existence de cointégration, leurs ajustements de court terme semblent faibles.
+
+## Conclusion
+
+L’analyse menée dans cette partie s’inscrit dans une démarche de compréhension des dynamiques économiques sur le long et le court terme. L’approche par séries temporelles, et en particulier la modélisation VECM, nous a permis d’explorer la manière dont nos variables évoluent dans le temps et s’influencent mutuellement, avec des retards et des ajustements.
+
+Ce type d’analyse est particulièrement pertinent dans le cadre de variables comme les salaires et le nombre de transactions immobilières, qui sont toutes deux soumises à des évolutions progressives, à des cycles économiques. Grâce au test de Johansen, nous avons mis en évidence une relation de cointégration entre ces deux séries : cela signifie qu’elles sont liées par un équilibre de long terme, malgré leurs évolutions individuelles non stationnaires.
+
+Du point de vue économique, cela suggère que sur une période prolongée, les salaires et l’activité immobilière ont tendance à évoluer ensemble. Ce lien peut refléter plusieurs mécanismes : par exemple, une hausse des salaires peut soutenir la demande de logements, tandis qu’un marché immobilier actif peut traduire une situation économique favorable susceptible d'augmenter les salaires. Même si les effets ne sont pas toujours immédiats ou directs, une logique d’ajustement lent s’installe entre ces deux séries.
+
+La modélisation VECM nous permet ensuite d’identifier comment chacune des variables réagit aux déséquilibres. Il ressort que les salaires s’ajustent significativement, mais lentement, à l’équilibre de long terme. Ce résultat est cohérent avec leur nature rigide : les salaires ne changent pas brutalement d’un trimestre à l’autre, comme nous l'avons vu graphiquement. En revanche, les transactions immobilières ne réagissent pas significativement à ce déséquilibre, ce qui peut s’expliquer par leur sensibilité à d’autres facteurs plus volatils, comme les taux d’intérêt ou la politique du logement.
+
+Sur le court terme, les résultats montrent des relations plus complexes et parfois contre-intuitives :
+
+-   D’un côté, une hausse du nombre de transactions au trimestre précédent semble liée à une légère baisse des salaires, un résultat surprenant qui peut être dû à des effets indirects, ou à la présence de variables manquantes.
+
+-   D’un autre côté, nous observons qu’une hausse des transactions deux trimestres auparavant est suivie d’une baisse des transactions actuelles, ce qui est typique des marchés cycliques : une forte activité est souvent suivie d’un ralentissement, notamment en raison des anticipations des acteurs.
+
+Un autre apport majeur de cette analyse temporelle est d'éviter les régressions fallacieuses, en tenant compte du fait que les séries évoluent dans le temps et ne sont pas stationnaires en niveau. Notre modélisation garantit ainsi la validité statistique des résultats.
+
+Enfin, les fonctions de réponse impulsionnelle (IRF) ont confirmé que les chocs exogènes sur l’une ou l’autre des variables ne produisent pas d’effets significatifs dans le temps. Cela indique que les ajustements entre les deux variables sont peu sensibles aux chocs soudains et se jouent surtout dans une logique de tendance de long terme.
+
+Il est important de garder à l’esprit que certains résultats, bien que significatifs statistiquement, peuvent être influencés par la taille réduite de l’échantillon (40 observations), l’absence de variables explicatives complémentaires (taux d’intérêt, inflation, chômage), et une éventuelle hétérogénéité régionale non prise en compte.
+
+Des analyses plus poussées pourraient intégrer de nouvelles variables dans le modèle, pour mieux capter les dynamiques des variables.
+
+En résumé, cette analyse a mis en lumière une relation économique stable à long terme entre les salaires et le marché immobilier, tout en montrant que leurs dynamiques à court terme sont plus complexes. L’utilisation des séries temporelles permet de capter la lenteur des ajustements et de proposer une lecture plus fine des relations économiques dans la durée.
+
+\newpage
+
+# Panel
+
+## Introduction
+
+Une approche permise par l'accès à un ensemble de données par territoires est celle des données de panel. Grâce à la base des transactions (DVF) et un ensemble de bases trouvables sur le site de l'INSEE, la construction d'une base panel par territoire est désormais possible. Nous allons essayer ici d'analyser les différences entre territoires. Nous soupçonnons que ces différences peuvent être liées aux caractéristiques structurelles entre les territoires comme le patrimoine, la localisation, l'attractivité, ... Ces caractéristiques bougent peu dans le temps, ainsi l'approche par données de panel semble être intéressante ici pour isoler ces effets fixes afin de faire apparaître plutôt la compétitivité locale et autre.
+
+Au sein de cette section, nous allons chercher à regarder l'impact que les mutations ont sur les salaires et inversement. Pour ce faire nous ferons une première partie allant dans un sens et une seconde dans l'autre. Au sein de chaque partie nous ferons les modèles de base et les diagnostics associés, ensuite nous introduirons certaines variables de contrôle afin de vérifier la robustesse de nos résultats et hypothèses puis nous terminerons en discutant des implications et mécanismes économiques pouvant être à l'origine de ces résultats.
+
+Une approche par zone d'emploi serait préférable ici puisque c'est un découpage en espaces géographiques à l'intérieur desquels la plupart des actifs résident et travaillent, et dans lesquels les établissements peuvent trouver l'essentiel de la main d'œuvre nécessaire pour occuper les emplois offerts d'après l'INSEE. Cela semble alors pertinent mais cependant, ces zones ont changé en 2020 ne nous permettant donc pas de passer par cette aproche sur les années 2014 à 2022 car nous aurions trop peu de données dans ce panel non-cylindré. De plus, l'INSEE ne donne pas accès publiquement à toutes ses données notamment les "Bases tous salariés" de nombreuses années nous contraignent grandement sur l'inclusion de variables de contrôle pertinentes. Pour toutes ces raisons, nous décidons de nous diriger sur une approche departementale gardant une certaine hétérogénéité bien que moins informationnelle que les zones d'emploi.
+
+L'approche par panel nous offre quelques avantages :
+
+- Une exploitation d'informations importantes, nous travaillerons avec 837 observations grâce aux departements (93 departements $\times$ 9 années). Notons que nous travaillerons seulement sur l'ensemble des départements métropolitains puisque la base DVF ne fournit les données que de ces territoires. Il manque ici 3 départements sur les 96 dans nos observations : 57 (Moselle), 67 (Bas-Rhin), 68 (Haut-Rhin) qui correspondent à l'Alsace. Leurs données ne sont pas accessibles à ce jour car en Alsace-Moselle, le régime foncier est toujours régi par un droit local spécifique.
+
+- On suppose qu'il y a des effets individuels au sein des départements, ainsi toutes les variables inobservables mais qui seraient relativement constantes au cours du temps vont êtres captées par notre modèle, protégeant notre impact d'un biais de selection spatial (cultures locales, patrimoine, etc...). Les modèles de panel permettent aussi d'introduire des effets temporels nous permettant donc de bien identifier les dynamiques au sein des départements.
+
+### Présentation du panel
+
+Avant de passer à une quelconque analyse, nous proposons de présenter le panel utilisé par la suite. Il est de dimensions 837 par 26. Au sein de celui-ci nous pouvons trouver les variables *année* et *departements* ainsi que les *transactions* et *salaires* et un nombre important de variables de contrôle que nous utiliserons dans un second temps. (Voir annexe)
+
+#### Variable expliquées
+
+Les variables que nous allons modèliser sont les transactions (changement de proprietaire) et le salaire net horaire moyen. En 2022, leurs valeurs moyennes étaient réparties ainsi au sein des départements :
+
+![Carte](images/carte1.png)
+
+Cette répartion est globalement similaire de 2014 à 2022 avec quelques légères évolutions. Nous remarquons qu'entre les régions dites rurales et non rurales, nous observons de grandes disparités. Il serait intéressant de prendre en compte ceci par la suite. Les salaires et transactions sont vraiments bas dans la diagonale du vide et plus élevés dans les régions actives et bassins d'emploi comme nous pourrions nous en douter.
+
+Regardons cela de plus près en séparant les departements ruraux et non-ruraux :
+
+
+![boxplot](images/boxplot.png){height=200px}
+
+
+Ici, il est est vraiment clair qu'il a une différence significative entre les régions rurales et non-rurales, nous le prendrons en compte dans nos analyses futures, notamment dans la robustesse de nos coefficients. Le salaire net horaire moyen médian a presque 1.5 euros d'écart ce qui est énorme mais peut s'expliquer par le coût de la vie dans ces différentes régions.
+
+Compte tenu de ces grandes disparités et pour améliorer nos futurs modèles, nous préfererons les variables en logarithme. Les interpretations seront alors des élasticités. Nous réduisons ainsi l'écart entre les valeurs maximales et minimales pour diminuer les variances et rendre plus symetriques nos variables. 
+
+![Densite](images/densite.png)
+Les séries semblent assez symétriques désormais si ce n'est les salaires de la région parisienne.
+
+#### Variables contrôle
+
+Nous avons opté,et détaillerons ces choix par la suite, pour la part d'emploi au sein d'un département dans différents secteurs ainsi que le chômage et la part de jeunes (25-39ans) et vieux (65+ ans) travailleurs. Nous introduisons par la même occasion une variable indiquant le nombre d'emplois et la population au sein du département.
+
+<p align="center">
+
+![Corrélation](images/corrr.png){height=300px}
+
+</p>
+
+Pour éviter les problèmes de multicolinéarité, nous décidons d'enlever la part dans le secteur tertiaire.
+
+## L'impact des mutations sur les salaires
+
+Nous allons nous intéresser à l'impact des transactions sur les salaires. Le marché résidentiel influence t-il les salaires locaux ? Celui-ci est-il quantifiable et significatif ? Nous tenterons de répondre à ces questions via l'approche panel. Bien qu'il n'y ait pas de littérature sur le sujet, nous pouvons émmettre quelques hypothèses sur les résultats attendus. Nous nous attendons à 2 mécanismes :
+
+- Un premier effet bénéfique que nous appelons d'"*accommodance*". La quantité de transactions indiquerait une certaine fluidité du marché résidentiel facilitant donc la mobilité des travailleurs et permettant ainsi une certaine accomodance entre leurs compétences et emplois. Cela augmenterait le coût de rester dans un emploi non optimal pour le travailleur l'incitant donc à mieux s'apparier et ayant pour conséquences d'augmenter les salaires. Un coeficient positif serait alors attendu.
+
+- Le deuxième mécanisme, celui-ci plutôt négatif, est celui de la *pression des offres*. Si au sein de notre territoire nous observons une grande affluence au sein des transactions (exode, saisonnalité, ...), alors, l'offre de travail sera plus grande qu'auparavant ce qui va toute chose égale par ailleurs baisser les salaires moyens. Un coeficient negatif serait alors attendu.
+
+L'enjeu ici sera de révéler lequel de ces deux mécanismes domine afin d'établir l'impact que les transactions ont sur les salaires. Enfin, nous pourrions aussi nous attendre à des effets de composition sectorielle, à de l'asymetrie génerationnelle, etc... qui seront nos variables de contrôle par la suite afin de vérifier la robustesse de nos résultats. 
+
+### Modèle simple 
+
+```{r}
+panel <- pdata.frame(base,index = c("dep", "annee"))
+```
+
+
+Préliminairement à l'introduction d'une multitude de variables de contrôle démographiques, sectorielles et conjoncturelles dans les prochaines parties, il est important d'observer la relation "nue" ou "brute" entre nos 2 variables d'intérêt. Comme énoncé précedemment, nous prendrons le logarithme du salaire net horaire moyen ainsi que le logarithme du nombre de transactions. 
+
+Cette étape est cruciales pour les raisons suivantes, nous allons obtenir un coefficient qui regroupera l'effet des transactions mais aussi de potentielles autres variables l'influençant. Grâce à ceci, nous pourrons voir par la suite l'évolution de ce coefficient après l'ajout de variables de contrôle. Un autre point est celui des tests, avec ce modele nous pourrons établir de potentielles incohérences.
+
+Au vu de nos analyses sur les variables, nous construirons un modèle global et 2 autres modèles portant sur la ruralité des departements. Aussi, nos modélisations futures porteront sur un modèle *Within* et cela n'entravera pas nos analyses puisque nous avons bien de la variance temporelle dans nos séries (ANNEXE) garantissant la non nullité de nos variables après *Within*. Par ailleurs, nous observons une corrélation moyenne de 0.6 entre nos 2 séries en moyenne au cours des années.
+
+Notre modèle à effet individuel sera le suivant pour un departement $i$ à l'année $t$ :
+
+\begin{equation}
+s_{i,t} = a + \beta m_{i,t} + \alpha_{i} + \delta_{t} + \epsilon_{i,t}
+\label{modele_simple}
+\end{equation}
+
+Avec :
+
+- $s_{i,t}$ les log-salaires net horaire moyen
+- $m_{i,t}$ les log-mutations
+- $\alpha_{i}$ l'effet individuel
+- $\delta_{t}$ l'effet temporel
+- $a$ la constante
+- $\epsilon_{i,t}$ le terme d'erreur
+
+Ici, nous émettons l'hypothèse qu'il y a de l'effet individuel pour plusieurs raisons. Il existe un nombre important de variables difficilement observables influençant un département à avoir plus ou moins de transactions ou changement de salaire. Ces variables vont bouger lentement dans le temps voir pas, sauf évènement exceptionnel. Ainsi, il faut inclure de l'effet individuel (fixe nous le verrons par la suite) pour capter la véritable relation entre les transactions et salaires car sinon le modèle capterait simplement l'attractivité du département donc nous allons supprimer, via l'introduction de l'effet fixe, l'heterogénéité permanente. Cela est d'une importance primordiale pour capter l'essence de ce que nous recherchons, l'impact des mutations sur les salaires. 
+
+L'effet temporel est aussi primordial pour capter les chocs macro-économiques communs aux departements comme par exemple le Covid. De plus $\epsilon_{i,t}$ est non corrélé avec les effets et les variables explicatives. Cette stratégie garantit que le coefficient $\beta$ repose exclusivement sur les variations intra-département qui demeurent,après extraction, des tendances nationales.
+
+
+#### Identification du modèle
+
+Nous ne pouvons pas encore faire d'hypothèses sur le terme $\alpha_{i}$, bien que nous soupçonnions un modèle à effets fixes. Pour cela il faut le vérifier statistiquement, notamment à l'aide de tests de spécification. Il existe 2 types de test utilisés en panel : le test de Fisher, pour vérifier s'il existe bien de l'effet individuel, et le test d'Hausman et celui de Mundlak  pour vérifier si l'effet individuel est corrélé aux variables explicatives. En fonction de nos résultats, nous pourrons dire si nous avons un modèle à erreur simple, un REM (Random effect model) ou FEM (Fixed effect model) et donc choisir le bon estimateur (MCO, GLS, Within).
+
+##### Test de Fisher 
+
+Nos hypothèses sont les suivantes :
+
+$$\begin{cases} H_{0} : \sigma^2_{\alpha} = 0  &\text{Il n'y a pas d'effet individuel}\\H_{1} : \sigma^2_{\alpha} > 0 &\text{Il y a de l'effet individuel}\end{cases}$$
+
+Le test se base sur les résidus des modèles estimés sous l'estimateur *between* et *within*. (Plus d'info voir le Cours Rault) La statistique de test suit une loi de Fisher :
+
+$$ F = \frac{\hat{\sigma^2_{W}}}{\hat{\sigma^2_{B}}} \leadsto F(N - p, NT -N -p +1) $$
+Avec $N$ le nombre d'individus, $T$ le nombre de périodes et $p$ le nombre de variables.
+
+En appliquant ce test à nos données, nous pouvons determiner s'il y a de l'effet temporel et de l'effet individuel.
+
+Voici nos résultats :
+
+```{r include=FALSE}
+mod_fei <- plm(log_sal ~ log_mutations,
+              data   = panel,
+              model  = "within",
+              effect = "individual")
+mod_fet <- plm(log_sal ~ log_mutations,
+              data   = panel,
+              model  = "within",
+              effect = "time")
+mod_pool <- plm(log_sal ~ log_mutations,
+                data  = panel,
+                model = "pooling")
+
+test = data.frame("Stat F" = c(85.735,17.89),"P-Value" = c(0,0))
+```
+```{r results="asis"}
+kable(
+  test,
+  caption   = "Test F de Fisher",
+  align     = c("c","c")
+)
+```
+
+Nous remarquons que pour nos 2 tests, nous rejetons l'hypothèse nulle $H_{0}$. Ainsi, nous concluons à la présence d'effet individuel et temporel dans notre modèle comme nous nous y attendions.
+
+##### Test de Hausman
+
+Notre modèle est donc soit un modèle REM soit un modèle FEM. Pour arbitrer, nous devons effectuer le test de Hausman. Le test de Hausman se base sur une comparaison directe des estimateurs. Ce test nous permet de savoir si nos effets individuels sont corrélés avec nos variables explicatives.
+
+$$\begin{cases} H_{0} : Plim\frac{1}{NT}X^{'}\alpha = 0 &\text{Effet individuel corrélé aux explicatives}\\H_{1} : Plim\frac{1}{NT}X^{'}\alpha \neq 0 &\text{Non Corrélé}\end{cases}$$
+
+Notre Statistique de test suit ici une loi du Chi-deux :
+
+$$ H = (\hat{b_{W}}-b^{*})^{'} [V(\hat{b_{W}})-V(b^{*})](\hat{b_{W}}-b^{*}) \leadsto \chi^{2}(p-1)$$
+Avec $b^{*}$ l'estimateur des GLS.
+
+En appliquant ce test à nos données nous obtenons le résultat suivant :
+
+```{r}
+mod_re <- plm(log_sal ~ log_mutations,
+              data   = panel,
+              model  = "random",
+              effect = "twoways",
+              random.method = "swar")
+mod_fe <- plm(log_sal ~ log_mutations,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+test = data.frame("Stat H" = c(385),"P-Value" = c(0))
+```
+```{r results="asis"}
+kable(
+  test,
+  caption   = "Test H de Hausman",
+  align     = c("c","c")
+)
+```
+
+Nous remarquons que pour notre test, nous rejettons l'hypothèse nulle $H_{0}$. Ainsi, nous concluons que nos effets individuels sont corrélés aux variables explicatives.
+
+Avec ces 2 tests, nous mettons en évidence que les hypothèses liées aux estimateurs MCO, GLS ne sont pas respectées, ces estimateurs ne sont plus convergents, ainsi nous devons estimer différemment notre modèle. Cela montre qu'il manque des variables explicatives dans notre modèle (nous n'avons rien introduit d'autre pour le moment) mais que nous pouvons tout de même l'estimer d'où l'intérêt du panel dans ce cas.
+
+Pour supprimer cette corrélation des effets individuels aux explicatives, la solution est d'utiliser l'estimateur *within* qui va supprimer les effets. En effet, il va retirer aux observations d'un departement la moyenne de sa variable sur la période. Cela a pour effet de supprimer les effets car fixes au cours du temps mais aussi la constante de notre modèle. ($\alpha_{i} - \frac{9\times\alpha_{i}}{9} = 0$)
+
+Notre modèle \eqref{modele_simple} sera donc changé pour un modèle dans lequel pour chaque observation, la valeur des variables seront leur ecart à la moyenne sur la période.
+
+#### Estimation du modèle
+
+Avant d'estimer notre modèle, nous voulons alerter sur un point d'attention. Dans un modèle classique FEM il existe plusieurs hypothèses à respecter pour l'utiliser ou en tirer certaines inférences. Cependant, nous devons verifier l'une d'entre elle qui est primordiale : l'indépendance des termes d'erreur. ($Cov(\epsilon_{i,t},\epsilon_{i,j}) = 0$ pour $i \neq j$) 
+
+Cela est dû au fait que dans le cadre des départements ici, une perturbation dans un département peut influencer les autres, il peut avoir des effets de voisinage. Cela va biaiser nos ecart-types et donc nos inférences sur les coefficients. Par exemple, si les salaires sont hauts dans un département, cela peut influencer les habitants voisins à se deplacer, les politiques de certains départements peuvent affecter les autres, ... L'objectif ici est de verifier ceci via le test de Pesaran.
+
+En effectuant ce test, nous obtenons une p-value égale à 0.65. Ainsi, nos effets temporels et individuels ont l'air de bien capter toute les perturbations. Cependant, en effectuant un Test de Wooldridge sur panel, nous detectons de l'autocorrelation.
+
+Les effets fixes annuels éliminent bien la composante macro purement nationale, mais ils ne suffisent pas à garantir l’indépendance des erreurs dans le temps ni entre départements. Afin de conserver des tests de significativité fiables, nous utiliserons les erreurs-types Driscoll-Kraay (@de2006testing), qui restent valides même en présence d’autocorrélation et de dépendance croisée résiduelle (@hoechle2007robust). En faisant ceci, nous garantissons la robustesse de nos résultats puisque le test de Pesaran est faiblement puissant lorsque T est faible comme dans notre cas. (Prudence) Concernant les test de stationnarité (IPS, WU,...) notre panel a trop peu de périodes pour que les tests aient une puissance assez élevée. Nous estimerons donc nos modèles aussi en différence première pour verifier la robustesse de nos résultats. De plus, avec les series temporelles nous avons determiné qu'il y avait un équilibre de long terme et de la cointégration.
+
+
+En estimant notre modèle simple FEM \eqref{modele_simple} , nous obtenons les résultats suivants :
+
+```{r include=FALSE}
+paneld = pdata.frame(based,index = c("dep", "annee"))
+vcov_DK <- vcovSCC(mod_fe,type   = "HC1",maxlag = 1,cluster = "group")
+mod_fe$vcov = vcov_DK
+
+mod_fed = plm(log_sal ~ log_mutations, data   = paneld, model  = "within", effect = "twoways")
+vcov_DK <- vcovSCC(mod_fed,type   = "HC1",maxlag = 1,cluster = "group")
+mod_fed$vcov = vcov_DK
+
+coefs <- bind_rows(
+  tidy(mod_fe,  vcov = mod_fe$vcov)  %>% mutate(model = "FE simple"),
+  tidy(mod_fed, vcov = mod_fed$vcov) %>% mutate(model = "FE diff")
+) %>%
+  mutate(
+    est_se = sprintf("%.3f (%.3f)", estimate, std.error)
+  ) %>%
+  dplyr::select(
+    Coefficient = term,
+    Estimate    = estimate,
+    `Std. Error`= std.error,
+    `p-value`   = p.value,
+    Modele = model
+  )
+```
+```{r results="asis"}
+kable(coefs)
+```
+
+Nous remarquons que notre coefficient $\beta$ est négatif et significatif (-0.025). IC 95% = [ -0,038 ; -0,012 ].
+
+Ainsi, une hausse de 10% du nombre de transactions au sein d'un département baisserait de 0.25%  le salaire net horaire moyen (enorme). 
+
+Nous sommes assez surpris d'avoir un coefficient négatif mais cela peut donc nous emmener à première vue sur l'hypothèse de la pression des offres d'emploi, l'afflux de main-d’œuvre. En effet, un marché immobilier très actif peut signaler une arrivée nette de nouveaux habitants ; si l’offre de travail augmente plus vite que la demande locale, la pression salariale baisse. Nous pourrions aussi observer un effet de composition, les secteurs à bas salaires (commerce, tourisme) connaissent un turn-over résidentiel plus élevé ; l’élasticité négative pourrait réfleter un changement de structure plutôt qu’un effet causal.
+
+Il est encore trop tôt pour s'avancer autant. Retenons tout de même cette première valeur significative. De plus, en refaisant ce modèle sur le panel en différence première avec donc une période en moins (T=8), nous obtenons un coefficient similaire, signe de la robustesse de celui-ci. L'effet négatif n'est donc pas lié à la non-stationnarité de nos séries.
+
+L'analyse des résidus nous montre ceci :
+
+
+![Analyse résidus modèle simple](images/residus1.png){height=300px width=600px}
+
+```{r results="asis"}
+kable(data.frame("Stat test" = c(283.85,0.78),"p-value" = c(0,0),"Test" = c("Breusch-Pagan","Shapiro-Wilk normality")))
+```
+
+Plusieurs analyses peuvent être faites sur notre modèle préliminaire. Ici, les résidus de notre modèle ne suivent pas une loi normale comme nous pouvions nous y attendre. Cependant, ils sont centrés sur 0 ce qui est une bonne nouvelle concernant le biais. En moyenne notre modèle est bon. 
+
+Le test de Brausch-Pagan nous comfirme la présence d'héteroscédasticité dans les erreurs. Cela nous amène à nous poser quelques questions sur l'estimation du coefficient. L'une des méthodes pour essayer de régler ce problème est de rajouter des variables dans notre modèle pour éviter les erreurs et obtenir une meilleur fiabilité des test de significativité.
+
+### Modèle enrichi
+
+La section précédente a établi que, toutes choses égales par ailleurs, une hausse de 10% du volume de transactions résidentielles est associée à une baisse d’environ 0,25% du salaire net horaire moyen. Ce résultat est stable d'ailleurs, quel que soit le traitement de stationnarité (niveaux ou différences premières). Cette corrélation brute constitue un point de départ, un comparatif, mais elle agrège potentiellement plusieurs canaux : conjoncture du marché du travail, structure sectorielle, composition démographique,...
+
+L'objectif de cette partie sera alors de purger notre variable d'intérêt : les mutations. Nous devons éviter les biais d'estimation et donc les régressions fallacieuses en contrôlant notre variable par d'autres qui pourraient potentiellement la composer. De plus nous allons essayer de chercher à savoir quelles sont les autres variables pouvant influencer les salaires ainsi que leur impact. Nous voulons tirer ici l'essence même de l'impact des mutations sur les salaires.
+
+Pour ce faire, nous allons créer de nouveaux modèles en ajoutant peu à peu de nouvelles variables de contrôle et vérifier comment les coefficients bougent. Cela aura comme intérêt de nous renseigner sur la robustesse de nos résultats préliminaires ainsi que sur l'impact des différentes autres variables, quelles sont celles qui dominent ? La corrélation entre nos deux variables reflète-t-elle la structure sectorielle et démographique (territoires agricoles, vieillissants) plutôt qu’un mécanisme mobilité-salaire ?
+
+Nos hypothèses sont qu'il y a forcement des effets de composition et que l'ajout de ces variables de contrôle baissera partiellement notre coefficient mais pas au point de le ramener à 0. Si c'est le cas, alors cela montrera qu'il existe bien un impact propre aux mutations de logement. 
+
+#### Choix des variables de contrôle
+
+Dans l'ensemble de la section Panel, nous utiliserons les variables de contrôle suivantes:
+
+Structure du marché du travail :
+
+- Le taux de chômage, la conjoncture du marché du travail est importante à prendre en compte, le chômage peut varier énormément d'un département à l'autre ayant donc des conséquences sur son attractivité et donc la mobilité de la population. Lorsque le chômage baisse, une tension salariale s'intensifie ce qui facilite les mutations, il faut retirer cet effet des mutations. Dans notre panel cette variable est en point de pourcentage ($chomage \in [0:100]$).
+
+- Le nombre total d'emplois salariés, il mesure la taille du bassin d'emploi et donc cela permettra de neutraliser les effets sur les départements ayant des volumes important de mutations et salaires. L'objectif est d'éviter que le modèle nous indique qu'un département par défaut grand aura des salaires élevés. Cette variable est passée en logarithme pour les raisons évoquées dans la partie de présentation du panel.
+
+Démographie :
+
+- Part de la population jeune, cette variable renseigne sur la part des personnes agées de 25 à 39 ans. C'est cette tranche d'âge qui va être amenée à se deplacer, déménager le plus souvent. Elle peut donc avoir un effet sur les salaires et les mutations qu'il faut prendre en compte. Dans notre panel cette variable est en point de pourcentage ($part25a39 \in [0:100]$).
+
+- Part de la population vielle, comme pour la variable précedente, celle-ci renseigne sur la part de la population agée de plus de 65 ans. Cet âge correspond géneralement au passage à la retraite et peut influencer nos 2 variables assez logiquement puisque les salaires des retraités baissent, de plus ceux-ci peuvent vendre leur maison et changer de logement, etc... Dans notre panel cette variable est en point de pourcentage ($part65 \in [0:100]$).
+
+- Nous avons aussi ajouté comme mentionné plus haut, une variable dichotomique *ruralité* qui vaut "1" si le departement est dit rural (moins de 100 hab/km²), 0 sinon.
+
+Composition sectorielle :
+
+- Part d'emplois salariés dans le secteur Agricole, cette variable peut être intéressante à ajouter puisque ces métiers ont tendance à être des pratiqués en ruralité, et à salaire faible cela peut donc jouer dans le modèle. Nous allons pouvoir neutraliser les écarts salariaux en fonction de la structure sectorielle du département. Dans notre panel cette variable est en point de pourcentage ($partAgricole \in [0:100]$).
+
+- Part d'emplois salariés dans le secteur Industriel, même raisonnement bien que nous nous attendions ici à ce que celui-ci ait un effet positif sur les salaires.
+
+- Part d'emplois salariés dans le secteur Tertiaire, même spécialisation que précédemment bien qu'il faut noter que celle-ci concerne seulement le tertiaire marchand. Bien que nous ne prenons pas le non-marchand, cela ne pose pas de problème puisque par la suite pour éviter tout problème de multi-colinéarité nous retirerons cette variable qui sera donc prise en reference dans le modèle en quelque sorte.
+
+- Part d'emploi dans le secteur de Construction, ici même raisonnement que pour le secteur agricole.
+
+Ces variables seront donc les seules utilisées dans nos modèles.
+
+Nous aurions pu incorporer bien d'autres variables de contrôles qui auraient un sens économique, nous pouvons notamment parler de l'inflation pour les salaires avec l'IPC mais dans le cadre du modèle within il n'y aurait pas de variation de par le caractère commun de l'inflation au niveau national. Il est déjà pris en compte dans nos effets temporels donc ça n'aurait pas de sens de le rajouter, de même pour les taux d'emprunt et autres. Un autre point pertinent aurait était celui de la composition par catégorie socioprofessionnelle pour expliquer les salaires puisque les cadres ont naturellement des salaires plus élevés que les ouvriers et employés mais nous n'avons pu les considérer puisque "les Bases Tous salariés" ne sont pas toutes publiques pour les années que nous considérons.
+
+Nous n'utilisons pas les autres variables de la base DVF puisque celles-ci sont logiquement calculées sur l'echantillon de logement qui d'est vu changer de propriètaire donc ne représentant pas les véritables caractéristiques du parc immobilier de chaque departement. De plus ces 2 variables sont plus ou moins liées et peuvent intéragir avec des effects conjoncturels et la valeur moyenne des surfaces ou nombre de pièces sont souvent une conséquence et non pas une cause. 
+
+#### Résultats des modèles
+
+Le modèle retenu est le suivant :
+
+\begin{equation}
+s_{i,t} = X_{i,t}\hat{\beta} + \alpha_{i} + \delta_{t} + \epsilon_{i,t}
+\label{modele_enrichi}
+\end{equation}
+
+Avec :
+
+- $X_{i,t}$ le vecteur de dimension (1,7) pour un departement $i$. Ce vecteur est composé de l'ensemble de nos variables explicatives retenues, (*log_mutations, Chomage, part_25_39, part_65_plus, p_industrie, p_agricole, p_construction*).
+
+- $\hat{\beta}$ le vecteur estimé de nos paramètres, coefficients associés aux variables explicatives. Il est de dimension (7,1)
+
+```{r include=FALSE}
+mod_fe1 <- plm(log_sal ~ log_mutations + Chomage + log_tout_emploi,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe1$vcov = vcov_DK <- vcovSCC(mod_fe1,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe2 <- plm(log_sal ~ log_mutations + Chomage + log_tout_emploi + part_25_39 + part_65_plus + log_pop,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe2$vcov = vcov_DK <- vcovSCC(mod_fe2,type   = "HC1",maxlag = 1,cluster = "group")
+
+
+mod_fe3 <- plm(log_sal ~ log_mutations + Chomage + log_tout_emploi + part_25_39 + part_65_plus + log_pop +p_Industrie+p_Construction+p_Agriculture + p_Tertiaire,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe3$vcov = vcov_DK <- vcovSCC(mod_fe3,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe4 <- plm(log_sal ~ log_mutations + Chomage + part_25_39 + part_65_plus  +p_Industrie+p_Construction+p_Agriculture,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe4$vcov = vcov_DK <- vcovSCC(mod_fe4,type   = "HC1",maxlag = 1,cluster = "group")
+
+models <- list(
+  "FEM 1"    = mod_fe1,
+  "FEM 2"    = mod_fe2,
+  "FEM 3"    = mod_fe3,
+  "FEM 4"    = mod_fe4
+)
+
+# 2. Tidy + collecter estimate & p.value pour chaque modèle
+coef_long <- imap_dfr(models, ~ {
+  tidy(.x) %>% 
+    dplyr::select(term, estimate, p.value) %>%
+    mutate(model = .y)
+})
+
+# 3. Formater la chaîne "estimation (p-value)"
+coef_long <- coef_long %>%
+  mutate(
+    cell = sprintf(
+      "%.3f (%.3f)",
+      estimate, p.value
+    )
+  )
+
+# 4. Passer en wide : une colonne par modèle
+coef_wide <- coef_long %>%
+  dplyr::select(term, model, cell) %>%
+  pivot_wider(
+    names_from  = model,
+    values_from = cell
+  ) %>%
+  rename(Variable = term)
+```
+
+```{r}
+kable(
+  coef_wide,
+  caption = "Coefficients et p-values des modèles en niveau",
+  align   = "l" 
+)
+```
+Dans le modèle retenu, nous avons retiré certaines variables à cause de la colinéarité après un VIF. 
+
+Le modèle enrichi met en évidence une élasticité négative (-0.019) mais de faible ampleur du salaire net horaire moyen au volume de transactions. Cette relation persiste après neutralisation de la structure du marché de l'emploi, de la structure d’âge et de la composition sectorielle, suggérant que les mutations auraient un impact négatif sur les salaires nets horaires moyens à court terme. L’effet apparaît plus marqué dans les territoires vieillissant ou à dominante agricole, tandis que la densité industrielle compense partiellement cette tendance. 
+
+Nous pourrions ici penser que notre hypothèse initiale sur l'afflux d'offre de travail se comfirme, que l'afflux pourrait être lié aussi à la saisonnalité, etc... puisque l'élasticité reste négative et a réduit d'une faible ampleur montrant une certaine robustesse à première vue mais il faut faire preuve de prudence, nos résultats sonnent assez fallacieux, le chômage ici n'a pas d'impact sur les salaires cela est assez étrange, de plus, les estimations de ces modèles sur les variables en différence première, nous donnent ceci :
+
+```{r include=FALSE}
+mod_fe1 <- plm(log_sal ~ log_mutations + Chomage + log_tout_emploi,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe1$vcov = vcov_DK <- vcovSCC(mod_fe1,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe2 <- plm(log_sal ~ log_mutations + Chomage + log_tout_emploi + part_25_39 + part_65_plus + log_pop,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe2$vcov = vcov_DK <- vcovSCC(mod_fe2,type   = "HC1",maxlag = 1,cluster = "group")
+
+
+mod_fe3 <- plm(log_sal ~ log_mutations + Chomage + log_tout_emploi + part_25_39 + part_65_plus + log_pop +p_Industrie+p_Construction+p_Agriculture + p_Tertiaire,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe3$vcov = vcov_DK <- vcovSCC(mod_fe3,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe4 <- plm(log_sal ~ log_mutations + Chomage + part_25_39 + part_65_plus  +p_Industrie+p_Construction+p_Agriculture,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe4$vcov = vcov_DK <- vcovSCC(mod_fe4,type   = "HC1",maxlag = 1,cluster = "group")
+
+models <- list(
+  "FEM 1"    = mod_fe1,
+  "FEM 2"    = mod_fe2,
+  "FEM 3"    = mod_fe3,
+  "FEM 4"    = mod_fe4
+)
+
+# 2. Tidy + collecter estimate & p.value pour chaque modèle
+coef_long <- imap_dfr(models, ~ {
+  tidy(.x) %>% 
+    dplyr::select(term, estimate, p.value) %>%
+    mutate(model = .y)
+})
+
+# 3. Formater la chaîne "estimation (p-value)"
+coef_long <- coef_long %>%
+  mutate(
+    cell = sprintf(
+      "%.3f (%.3f)",
+      estimate, p.value
+    )
+  )
+
+# 4. Passer en wide : une colonne par modèle
+coef_wide <- coef_long %>%
+  dplyr::select(term, model, cell) %>%
+  pivot_wider(
+    names_from  = model,
+    values_from = cell
+  ) %>%
+  rename(Variable = term)
+```
+
+```{r}
+kable(
+  coef_wide,
+  caption = "Coefficients et p-values des modèles en différence première",
+  align   = "l" 
+)
+```
+
+Nous remarquons ici que tout s'ecroule, nos mutations n'ont plus d'effet significatif et certaines variables ont changé de signe. Ainsi, nous pouvons penser que l’élasticité négative que nous trouvions captée en niveau est en réalité d’origine structurelle. La différenciation supprime les tendances longues communes ; si la relation était réellement causale à court terme, on la retrouverait dans le modèle en différence. Le fait qu’elle devienne nulle et même légèrement positive (non significative) indique qu’elle provenait de caractéristiques permanentes (densité, spécialisation, urbanité) déjà contrôlées par les effets fixes mais encore corrélées à la tendance propre des séries.
+
+Nous pouvons même nous questionner sur le risque de regression fallacieuse ici. L’exercice en différences confirme que la baisse salariale observée dans les départements très actifs sur le marché immobilier ne se matérialise pas instantanément : il s’agit plus d’un écart de niveau de long terme que d’un ajustement immédiat.
+
+Le salaire devient significatif dans ce modèle, ce qui semble bien plus cohérent tout de même avec la théorie économique. Il est aussi normal d'observer un effet négatif sur la tranche d'âge 25-39 ans puisqu'ils sont en début de carrière et vont en général avoir des salaires plus bas.
+
+Pour conclure cette partie de l'impact des mutations sur les salaires, nous pouvons dire que lorsque nous passons en différences premières, l’élasticité négative des salaires au volume de mutations disparaît, tandis que la variation du chômage émerge comme déterminant principal de la dynamique salariale. Ces résultats suggèrent que l’association négative repérée en niveau relève davantage de différences structurelles, de la densité, spécialisation, démographie que d’un mécanisme de court terme. Il faut faire attention avec ces résultats puisqu'ils sont calculés seulement avec une période T=9 ou 8 (diff) ce qui augmente le bruit.
+
+Les analyses concernant la ruralité sont vains de par le fait que nous disposons de trop peu de données et les périodes étant courtes, nous ne pouvons sortir de résultat concret.
+
+Toutes les analyses sur les résidus de ces modèles sont en annexe.
+Pour obtenir des résultats plus robustes il faudrait plutôt se diriger vers un modele ECM. Nos variables suivent certainement des tendance communes comme vu dans la partie serie temporelle d'où le besoin d'agir sur celles-ci avant de faire nos modèles pour eviter les risques de regressions fallacieuses comme nous avons pu l'avoir precedemment. Nous trouvons qu'il existe de la cointegration ainsi nous pouvons contruire notre modèle.
+
+Notre Modele de Panel ECM sera le suivant :
+
+\begin{equation}
+\Delta s_{i,t} =  \gamma (s_{i,t} - \beta^{'} X_{i,t-1})    + \phi^{'} \Delta X_{i,t} + \alpha_{i} + \delta_{t} + \epsilon_{i,t}
+\label{modele_enrichi}
+\end{equation}
+
+Avec :
+
+- $\delta X_{i,t}$ les variations de nos variables explicatives, cours terme.
+- $\gamma$ La vitesse de convergence associée à l'equilibre de long terme.
+
+Les interpretations sont les mêmes que dans la partie serie temporelle donc nous ne reviendrons pas dessus ici. 
+
+```{r}
+test <- data.frame(
+  Variables = c(
+    "equilibre_LT",
+    "d_log_mutations",
+    "d_Chomage",
+    "d_log_prixm2",
+    "d_part_25_39",
+    "d_part_65_plus",
+    "d_p_Agriculture",
+    "d_p_Industrie",
+    "d_p_Construction"
+  ),
+  Coefficient = c(
+    -0.8833,
+    -0.0012,
+     0.0031,
+     0.0401,
+    -0.8715,
+    -0.2482,
+    -0.0058,
+     0.0034,
+    -0.0090
+  ),
+  P_value = c(
+     0.0000,  # equilibre_LT
+     0.6826,  # d_log_mutations
+     0.0182,  # d_Chomage
+     0.0008,  # d_log_prixm2
+     0.0246,  # d_part_25_39
+     0.6613,  # d_part_65_plus
+     0.5077,  # d_p_Agriculture
+     0.0683,  # d_p_Industrie
+     0.0085   # d_p_Construction
+  ),
+  stringsAsFactors = FALSE
+)
+```
+```{r results="asis"}
+kable(test,caption = "Estimation Panel ECM R² = 0.4538")
+```
+
+Relation de long terme :
+
+Le coefficient lié à l'équilibre de long terme est de -0,8833. Ainsi, si le salaire net horaire moyen observé s’écarte de son niveau d’équilibre fondé sur les mutations immobilières et nos autres variables, alors 88 % de cet écart sera corrigé l’année suivante. Économiquement, nous interprétons cela ainsi : les salaires départementaux évoluent fortement vers le prix d’équilibre déterminé par le marché immobilier et la composition sectorielle. Un dysfonctionnement (salaire trop élevé ou trop bas) est presque intégralement dissipé en un an, ce qui traduit une forte flexibilité salariale de court terme face aux tensions du marché résidentiel.
+  
+Relations de court terme :
+  
+- Chômage : Une hausse de 1 point de pourcentage du taux de chômage d’une année à l’autre est associée à une progression de +0,31% du salaire moyen l’année suivante. Bien que contre-intuitif à première vue, cet effet peut refléter un effet compositionnel : en phase de hausse du chômage, ce sont souvent les postes les moins qualifiés qui se réduisent, tirant la moyenne salariale vers le haut.
+
+- Prix au m² : Conformément aux attentes, une augmentation de 1% des prix immobiliers se traduit rapidement par +0,04% de hausse salariale. Cela peut signaler un effet de coût de la vie : face à la hausse des loyers et des emprunts, les négociations salariales intègrent une prime protectrice.
+
+- Part des 25-39 ans : L’accroissement de 1 point de pourcentage de la part des 25-39 ans correspond à une baisse de 0,87% de la croissance salariale. Ce résultat suggère qu’un flux accru de jeunes actifs peut exercer une pression à la baisse sur les salaires moyens, via un effet d’offre de travail plus abondante dans cette tranche d’âge.
+
+- Part de la construction : Une hausse d’un point de la part des emplois en construction pèse faiblement mais significativement sur la croissance salariale, conformément à la plus faible rémunération dans ce secteur.
+
+Les autres variations sectorielles (agriculture, industrie, senior 65+, etc.) n’apparaissent pas significatives à court terme, ce qui indique que leur impact annualisé reste marginal comparé aux dynamiques de chômage, de prix et de structure démographique. Nous n'observons pas d'effet de court terme des log_mutations sur les salaires.
+
+## L'impact des salaires sur les mutations
+
+Dans cette deuxième partie de section, nous reproduirons les étapes précedentes sans détailler la technique cette fois-ci et présenterons seulement les résultats qui nous intéressent. Tous les tests et autres vérifications de robustesse se trouveront en Annexe.
+
+### Modèle simple
+
+Notre modèle diffère de la première partie :
+
+\begin{equation}
+m_{i,t} = \beta s_{i,t} + \alpha_{i} + \delta_{t} + \epsilon_{i,t}
+\label{modele_simple}
+\end{equation}
+
+Avec :
+
+- $s_{i,t}$ les log-salaires net horaire moyen
+- $m_{i,t}$ les log-mutations
+- $\alpha_{i}$ l'effet individuel
+- $\delta_{t}$ l'effet temporel
+- $\epsilon_{i,t}$ le terme d'erreur
+
+```{r}
+mod_fe <- plm(log_mutations ~ log_sal,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+vcov_DK <- vcovSCC(mod_fe,type   = "HC1",maxlag = 1,cluster = "group")
+mod_fe$vcov = vcov_DK
+mod_fed = plm(log_mutations ~ log_sal, data   = paneld, model  = "within", effect = "twoways")
+vcov_DK <- vcovSCC(mod_fed,type   = "HC1",maxlag = 1,cluster = "group")
+mod_fed$vcov = vcov_DK
+
+coefs <- bind_rows(
+  tidy(mod_fe,  vcov = mod_fe$vcov)  %>% mutate(model = "FE simple"),
+  tidy(mod_fed, vcov = mod_fed$vcov) %>% mutate(model = "FE diff")
+) %>%
+  mutate(
+    est_se = sprintf("%.3f (%.3f)", estimate, std.error)
+  ) %>%
+  dplyr::select(
+    Coefficient = term,
+    Estimate    = estimate,
+    `Std. Error`= std.error,
+    `p-value`   = p.value,
+    Modele = model
+  )
+```
+```{r results="asis"}
+kable(coefs)
+```
+
+L’élasticité négative observée en niveau témoigne d’un arbitrage structurel : les territoires les mieux rémunérés se caractérisent par une moindre rotation du parc résidentiel. Toutefois, l’absence d’effet en dynamique annuelle montre que la hausse du salaire n’entraîne pas, à court terme, un ajustement du volume de transactions. Il conviendra donc, dans la suite, de contrôler explicitement le niveau des prix immobiliers afin de discerner l’effet solvabilité de l’effet mobilité.
+
+
+### Modèle enrichi
+
+#### Variables de contrôle
+
+Nous allons ici réitérer les étapes de la première partie de la section mais cette fois-ci en ajoutant d'autres variables de contrôle qui nous semblent appropriées pour expliquer le nombre de mutations :
+
+- La surface moyenne des logements, ici cela rejoint un peu le contraste entre ruralité et non ruralité dans le sens où nous nous attendons à ce que dans les territoires ruraux, il y ait une proportion de maison plus grande que dans les departements non-ruraux. Nous le montrerons par la suite.
+
+- Le prix au m² des logements, ceci va agir un peu comme un indice des prix et va nous permettre de purger cet aspect là. Il peut être à la fois plus difficile d'acquérir des logements s'ils ont un prix élevé mais cela peut aussi réfleter une certaine attractivité de la région et donc une offre supérieure à la demande et des prix élevés et donc ainsi des salaires aussi plus élevés.
+
+- On ajoute aussi la proportion de maison dans les mutations.
+
+<p align="center">
+
+![Corrélations nouvelles variables](images/corrr2.png){height=300px}
+
+</p>
+
+#### Résultat des estimations
+
+Le modèle retenu est le suivant :
+
+\begin{equation}
+m_{i,t} = X_{i,t}\hat{\beta} + \alpha_{i} + \delta_{t} + \epsilon_{i,t}
+\label{modele_enrichi}
+\end{equation}
+
+Avec :
+
+- $X_{i,t}$ le vecteur de dimension (1,7) pour un departement $i$. Ce vecteur est composé de l'ensemble de nos variables explicatives retenues, (*log_sal, part_25_39, part_65_plus, p_industrie, p_construction, log_prixm2, log_surface*).
+
+- $\hat{\beta}$ le vecteur estimé de nos paramètres, coefficients associés aux variables explicatives. Il est de dimension (7,1)
+
+```{r include=FALSE}
+mod_fe1 <- plm(log_mutations ~ log_sal + Chomage + log_tout_emploi,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe1$vcov = vcov_DK <- vcovSCC(mod_fe1,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe2 <- plm(log_mutations ~ log_sal + Chomage + log_tout_emploi + part_25_39 + part_65_plus,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe2$vcov = vcov_DK <- vcovSCC(mod_fe2,type   = "HC1",maxlag = 1,cluster = "group")
+
+
+mod_fe3 <- plm(log_mutations ~ log_sal + Chomage + log_tout_emploi + part_25_39 + part_65_plus  +p_Industrie+p_Construction+p_Agriculture ,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe3$vcov = vcov_DK <- vcovSCC(mod_fe3,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe4 <- plm(log_mutations ~ log_sal +  log_prixm2  +part_25_39+ part_65_plus +p_Industrie+ log(SurfaceMoy) + p_Construction,
+              data   = panel,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe4$vcov = vcov_DK <- vcovSCC(mod_fe4,type   = "HC1",maxlag = 1,cluster = "group")
+
+models <- list(
+  "FEM 1"    = mod_fe1,
+  "FEM 2"    = mod_fe2,
+  "FEM 3"    = mod_fe3,
+  "FEM 4"    = mod_fe4
+)
+
+# 2. Tidy + collecter estimate & p.value pour chaque modèle
+coef_long <- imap_dfr(models, ~ {
+  tidy(.x) %>% 
+    dplyr::select(term, estimate, p.value) %>%
+    mutate(model = .y)
+})
+
+# 3. Formater la chaîne "estimation (p-value)"
+coef_long <- coef_long %>%
+  mutate(
+    cell = sprintf(
+      "%.3f (%.3f)",
+      estimate, p.value
+    )
+  )
+
+# 4. Passer en wide : une colonne par modèle
+coef_wide <- coef_long %>%
+  dplyr::select(term, model, cell) %>%
+  pivot_wider(
+    names_from  = model,
+    values_from = cell
+  ) %>%
+  rename(Variable = term)
+```
+
+```{r}
+kable(
+  coef_wide,
+  caption = "Coefficients et p-values des modèles en niveau",
+  align   = "l" 
+)
+```
+
+Dans nos estimations en niveau, le salaire net horaire moyen apparaît systématiquement avec un coefficient négatif, ce qui suggère qu’un département où les revenus salariaux sont plus élevés connaît, toutes choses égales par ailleurs, un nombre de mutations plus faible. Sur le plan économique, cela peut s’expliquer par l’effet de revenu, des salariés plus aisés peuvent se tourner vers des stratégies d’épargne ou d’investissement autres que la mobilité résidentielle, et sont moins amenés à vendre ou acheter fréquemment. Par ailleurs, des salaires plus élevés sont souvent corrélés à des prix immobiliers plus élevés, ce qui restreint la demande et réduit mécaniquement le nombre d’actes de vente.
+
+À l’inverse, la proportion de seniors (65 ans et plus) dans un département tend à exercer un effet positif sur le nombre de mutations. Économiquement, nous y voyons l’expression du recours au patrimoine : à l’âge de la retraite, de nombreux ménages changent de logement pour se rapprocher des services, réduire la taille de leur résidence ou libérer du capital. Ce retrait progressif du marché du travail s’accompagne souvent d’opérations de revente, ce qui alimente le volume global des mutations.
+
+Le prix au mètre carré pèse, lui aussi, négativement sur les volumes. Dans les zones où les prix sont élevés, la barrière à l’entrée s’accroît : l’incertitude sur la capacité d’emprunt pèse sur les projets de vente–achat. Cette relation "prix - volume" traduit une simple logique d’arbitrage : plus le coût unitaire du foncier ou de la construction est élevé, moins les ménages s’engagent dans un cycle de transactions.
+
+Enfin, la surface moyenne des logements est associée à un effet positif sur le nombre de mutations : les biens de grande taille constituent un segment de marché plus actif, souvent lié à la relance de programmes neufs ou à des ventes de résidences secondaires. Les grandes surfaces suscitent un intérêt tant du côté des investisseurs (rentabilité locative) que des ménages à la recherche d’espace.
+
+Tous ces résultats sont à mettre en suspension, comme pour la partie précedente , lorsque nous passons au modèle en difference premiere, tous les coefficients deviennent négatifs. Au vu de nos series qui sont macro-économiques nous émettons largement l'hypothèse qu'elles ne soient pas stationnaires cependant pour les raisons citées precedemment, nous ne pouvons faire de test sur le panel donc nous estimons aussi nos modèles en différence première pour vérifier leur robustesse et ici les résultats en différence première nous mettent en garde :
+
+```{r include=FALSE}
+mod_fe1 <- plm(log_mutations ~ log_sal + Chomage + log_tout_emploi,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe1$vcov = vcov_DK <- vcovSCC(mod_fe1,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe2 <- plm(log_mutations ~ log_sal + Chomage + log_tout_emploi + part_25_39 + part_65_plus,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe2$vcov = vcov_DK <- vcovSCC(mod_fe2,type   = "HC1",maxlag = 1,cluster = "group")
+
+
+mod_fe3 <- plm(log_mutations ~ log_sal + Chomage + log_tout_emploi + part_25_39 + part_65_plus  +p_Industrie+p_Construction+p_Agriculture ,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe3$vcov = vcov_DK <- vcovSCC(mod_fe3,type   = "HC1",maxlag = 1,cluster = "group")
+
+mod_fe4 <- plm(log_mutations ~ log_sal +  log_prixm2  +part_25_39+ part_65_plus +p_Industrie+ log(SurfaceMoy) + p_Construction,
+              data   = paneld,
+              model  = "within",
+              effect = "twoways")
+
+mod_fe4$vcov = vcov_DK <- vcovSCC(mod_fe4,type   = "HC1",maxlag = 1,cluster = "group")
+
+models <- list(
+  "FEM 1"    = mod_fe1,
+  "FEM 2"    = mod_fe2,
+  "FEM 3"    = mod_fe3,
+  "FEM 4"    = mod_fe4
+)
+
+# 2. Tidy + collecter estimate & p.value pour chaque modèle
+coef_long <- imap_dfr(models, ~ {
+  tidy(.x) %>% 
+    dplyr::select(term, estimate, p.value) %>%
+    mutate(model = .y)
+})
+
+# 3. Formater la chaîne "estimation (p-value)"
+coef_long <- coef_long %>%
+  mutate(
+    cell = sprintf(
+      "%.3f (%.3f)",
+      estimate, p.value
+    )
+  )
+
+# 4. Passer en wide : une colonne par modèle
+coef_wide <- coef_long %>%
+  dplyr::select(term, model, cell) %>%
+  pivot_wider(
+    names_from  = model,
+    values_from = cell
+  ) %>%
+  rename(Variable = term)
+```
+
+```{r}
+kable(
+  coef_wide,
+  caption = "Coefficients et p-values des modèles en différence première",
+  align   = "l" 
+)
+```
+
+
+L'effet négatif n'est surement pas significatif et ne serait donc pas à interpreter. Nous ne trouvons pas de lien concrèt entre nos 2 variables d'intérêt. Elles ont certainement seulement une tendance commune que le modèle en niveau capte mais sûrement pas parceque l'un influence l'autre dans ce panel. L'absence de coefficients significatifs montre qu'il n'y a pas de relation dynamique robuste d'une année à l'autre ici.
+
+Pour obtenir des résultats plus robustes il faudrait plutôt se diriger vers un modele ECM comme suit.
+
+```{r}
+test <- data.frame(
+  Parameter = c(
+    "equilibre_LT",
+    "d_log_sal",
+    "d_Chomage",
+    "d_log_prixm2",
+    "d_part_25_39",
+    "d_part_65_plus",
+    "d_p_Agriculture",
+    "d_p_Industrie",
+    "d_p_Construction",
+    "d_log_pop"
+  ),
+  Estimate = c(
+    -0.6899,
+    -0.0440,
+    -0.0170,
+     0.1801,
+     0.3665,
+    -4.7035,
+     0.0864,
+    -0.0002,
+     0.0088,
+    -0.0022
+  ),
+  P_value = c(
+    0.0000,  # equilibre_LT
+    0.7709,  # d_log_sal
+    0.1058,  # d_Chomage
+    0.0432,  # d_log_prixm2
+    0.8911,  # d_part_25_39
+    0.0688,  # d_part_65_plus
+    0.2094,  # d_p_Agriculture
+    0.9892,  # d_p_Industrie
+    0.6986,  # d_p_Construction
+    0.3766   # d_log_pop
+  ),
+  stringsAsFactors = FALSE
+)
+```
+```{r}
+kable(test,caption = "Estimation Panel ECM R² = 0.3779")
+```
+
+Le coefficient de l'equilibre long terme est estimé à -0,6899 (p < 0,001). Autrement dit, 68,99 % de tout écart au niveau d’équilibre des mutations est compensé dès l’année suivante. Concrètement, si le volume de transactions est, à un instant donné, supérieur (ou inférieur) au niveau de long terme déterminé par les salaires et nos autres variables, environ sept dixièmes de cet écart se corrigent en moyenne en un an. C’est une vitesse d’ajustement très rapide, qui témoigne d’un marché immobilier et salarial fortement interconnecté : dès qu’un département s’écarte de sa trajectoire de fond, les volumes de transactions reviennent presque immédiatement vers l’équilibre comme évoqué précedemment dans la première partie.
+
+Nous n'avons qu'un seul effet de court terme significatif. Le Prix au m² : Une hausse de 1 % du prix moyen au m² d’une année à l’autre s’accompagne d’une augmentation de +0,18% du volume de mutations l’année suivante. Cette relation positive peut sembler contre-intuitive, mais elle traduit probablement un phénomène de compression de l’offre : lorsque les prix grimpent, les propriétaires anticipent un prix encore plus élevé et accélèrent leurs ventes, ou bien les investisseurs arbitrent plus fréquemment leurs portefeuilles.
+
+
+Cette forte liaison entre le marché immobilier et le marché du travail trouve sa source dans plusieurs mécanismes économiques complémentaires :
+
+- Les prix du logement constituent une part majeure du budget des ménages. Lorsque les prix de l’immobilier grimpent, les employeurs doivent, de fait, proposer des salaires plus élevés pour attirer et retenir leur personnel. Inversement, dans les zones où les salaires augmentent, la demande de logements se renchérit et alimente la hausse des prix. Ce cercle crée un lien direct : hausse des prix -> pressions à la hausse sur les salaires -> hausse des salaires -> renchérissement des logements.
+
+- Les salariés sont de plus en plus mobiles : ils recherchent un compromis optimal entre opportunités d’emploi et qualité de vie (proximité des transports, écoles, services). Une région où les salaires sont attractifs verra affluer de nouveaux travailleurs, ce qui stimule la demande de logements et tire les prix vers le haut. À l’inverse, un marché immobilier devenu trop cher peut dissuader une partie de la main-d’œuvre potentielle, modérant la tension salariale.
+
+- Les acteurs économiques (ménages, entreprises, investisseurs) anticipent l’évolution conjointe des salaires et des prix : une hausse attendue des prix immobiliers peut conduire à une accélération des embauches et revalorisations salariales pour sécuriser les effectifs avant que le coût de la vie ne devienne trop élevé. Ces comportements stratégiques renforcent la co-évolution des deux marchés.
+    
+A la suite des ces analyses, nous rappelons que ces résultats sont à reconsidérer pour de nombreuses raisons. Nos estimations peuvent être biaisées (NIckell) à cause du nombre de période restreint (T=8). Nous avons vérifié la cointégration via Pedroni en sortant un vecteur de cointégration pour chaque département or il est pratiquement sûr qu'en réalité celui-ci diffère un peu d'un département à l'autre (Nous ne pouvons le tester sur d'autres échantillons par manque d'observations). Nous avons remarqué aussi qu'il reste un peu d'autocorrélation spatiale à la suite d'un test de Pesaran. Ici une approche plus locale serait préferable, le manque de granularité se fait ressentir dans les résultats.
+
+\newpage
+
+# Modèle Spatial
+
+Dans notre étude économique, nous pouvons supposer que la position géographique d’une zone d’emploi en relation avec ses voisines peut influencer sur le niveau des salaires observés. En d’autres termes les salaires d’une zone d’emploi peuvent-ils être influencés par ceux des zones adjacentes ? Les caractéristiques des zones voisines permettent-ils d’expliquer les disparités salariales ?
+
+Afin de répondre à ces questions, notre étude va se porter sur des modèles d’économétrie spatiale qui vont permettre d’intégrer les interactions géographiques entre nos observations.
+
+Notre raisonnement va se dérouler en plusieurs étapes. Tout d'abord, nous allons étudier la relation entre les salaires et les mutations. Par la suite, nous élargirons notre champ d’analyse en intégrant, en plus de ces deux variables, d’autres variables que nous jugeons pertinentes (@dabetdirection).
+
+Tout au long de cette analyse, nous allons utiliser le log des variables car cela permet de réduire la variance de la distribution.
+
+
+## L'autocorrelation spatiale 
+
+Le concept fondamental en économétrie spatiale est l’autocorrélation spatiale qui est une mesure de dépendance entre les valeurs de notre variable salaire sur différents lieux. Elle permet ainsi de déterminer si les zones d’emploi proches tendent effectivement à présenter des salaires similaires nous parlerons alors d’autocorrélation spatiale positive. Dans notre étude, nous pouvons nous attendre à une autocorrélation spatiale positive ,c’est-à-dire une concentration de zones d’emploi à hauts salaires autour d’autres zones elles aussi à hauts salaires et inversement pour les zones à bas salaires. Bien sûr, cette hypothese doit être verifiée à travers un test. 
+
+## Matrice de Pondération Spatiale
+
+Dans le premier temps de notre analyse, il convient de formaliser les relations spatiales entre les zones d’emplois à l’aide d’une Matrice de Ponderation Spatiale. Cette matrice, que nous allons noter W, est un outil nécessaire pour modéliser les relations spatiales. Elle indique dans quelle mesure deux zones d’emplois sont considérées comme voisines ou au contraire comme indépendantes. Nous allons pouvoir différencier plusieurs méthodes afin de construire cette matrice :
+
+- Matrice de contiguïté : les zones qui partagent une frontière commune sont alors considérées comme voisines, prenant la valeur 1 et les autres prennent la valeur 0. Cette matrice binaire sera normalisée par ligne.
+
+- Matrice de distances : la construction de cette matrice repose sur la distance entre les zones, qui sera souvent calculée à l’aide des centroïdes. Les poids sont définis comme l’inverse de la distance, puis normalisés. Cette distance peut être calculée selon plusieurs méthodes parmi laquelle nous pouvons retenir la distance euclidienne entre les centroïdes pour deux zones d’emploi.
+ 
+- matrice des K voisins les plus proches (KNN) : chaque zone est associée à ses k voisins les plus proches calculés avec une mesure de distance. Le choix de k est important et nous allons devoir l’itérer pour trouver le plus optimal. Si il est trop faible, il va négliger certaines interactions et si il est trop grand, son influence locale sera trop faible.
+
+<p align="center">
+
+![Explication methode KNN](images/IMAGE15.png){height=200px width=250px}
+</p>
+
+
+Nous avons choisi, dans un premier temps, de construire notre matrice de voisinage en utilisant la méthode de contiguïté. Il s’agit d’une matrice qui représente les relations spatiales entre unités géographiques : elle prend la valeur 1 si deux zones sont voisines, et 0 sinon. 
+
+Pour mieux visualiser ces relations spatiales, nous avons construit le graphique ci-dessus, qui illustre les liens de proximité entre les zones d’emploi françaises. Ce graphique repose sur la matrice de contiguïté W. 
+Chaque point représente une zone d’emploi, et les lignes rouges relient les zones considérées comme voisines. Sur le territoire représenté, chaque zone d’emploi compte au moins un voisin, au plus neuf, avec une moyenne d’environ cinq voisins par zone.
+
+<p align="center">
+
+![Voisinage entre Zone d'emplois](images/IMAGE1.png){height=200px width=250px}
+
+</p>
+
+## L'indice de Moran
+
+Pour mesurer l’autocorrélation spatiale des salaires, nous allons pouvoir utiliser l’indice de Moran ,c’est un indicateur souvent employé pour tester la dépendance spatiale. (@moran1950notes)
+
+Cette mesure varie allant de -1 (autocorrélation négative) à 1 (autocorrélation positive) en prenant également la valeur 0 montrant l’absence d’autocorrélation spatiale. Cet indice compare la valeur obtenue par une zone à la moyenne pondérée des valeurs de ses voisines.
+Un test statistique permet de vérifier la signification de l’autocorrélation détectée, la distribution de la statistique de test peut être obtenue par des simulations de type Monte-Carlo.
+
+
+\[
+\left\{
+\begin{array}{ll}
+H_0 : & \text{Absence d'autocorrélation spatiale(distribution aléatoire)
+} \\
+H_1 : & \text{Présence d'autocorrélation spatiale(valeurs similaires localisées)
+}
+\end{array}
+\right.
+\]
+
+
+À présent que nous avons détaillé notre structure spatiale, il est nécessaire de tester une éventuelle présence d’autocorrélation spatiale à l’aide du test de Moran.
+
+Ce test est effectué sur la variable salaire, qui constitue ici la variable dépendante. La p-value associée au test est égale à 2.2e-16, ce qui est extrêmement faible (voir Annexe 1). Pour un seuil de significativité \(\alpha = 5\%\) nous rejetons l’hypothèse nulle \(H_0\) ,qui postule l'absence d’autocorrélation spatiale.
+
+Il existe donc une forte autocorrélation spatiale globale positive des salaires (SNHM22) entre les différentes zones d’emploi.
+
+Ces résultats justifient pleinement le recours à des modèles spatiaux, qui permettent de prendre en compte l’interdépendance entre zones dans l’analyse des salaires. En effet, cette interdépendance viole les hypothèses classiques de l’OLS, rendant cette méthode inefficace et biaisée dans un tel contexte.
+
+Maintenant que nous avons confirmé l’existence d’un effet spatial global significatif sur le salaire net horaire moyen (SNHM22), à l’aide du test de Moran global, nous cherchons à identifier dans quelles zones cet effet est localement significatif, et de quel type d’autocorrélation il s’agit.
+
+<p align="center">
+
+![Nuage de Moran ](images/IMAGE3.png){height=300px width=300px}
+
+</p>
+
+<p align="center">
+
+![Exemple de representation d'un nuage de Moran ](images/IMAGE11.png){height=300px width=250px}
+
+</p>
+
+Le diagramme de Moran présenté s’est effectué sur nos données salariales avec une pondération spatiale qui à été réalisée à l’aide d’une matrice de contiguïté.  L’axe des abscisses indique la valeur centrée du salaire dans chaque zone d’emploi, tandis que l’axe des ordonnées affiche la moyenne spatiale de cette variable chez ses zones voisines, calculée à partir de la matrice de contiguïté.
+
+Cette droite de régression montre une relation positive qui permet de constater que les zones d’emploi où les salaires sont élevés sont souvent entourées par des zones d’emploi avec des salaires similaires. Cela confirme le fait que les salaires élevés ou faibles ont tendance à se regrouper spatialement. Nous observons également quelques points dans les quadrants HL et LH, correspondant à des zones atypiques localement, qui peuvent être interprétées comme des anomalies spatiales (outliers positifs ou négatifs).
+
+Cette représentation graphique renforce l’idée d’un effet spatial positif sur les salaires en France, confirmant la pertinence d’utiliser des modèles de régression spatiale dans l’analyse.
+
+<p align="center">
+
+![Autocorrelation Locale ](images/IMAGE4.png){height=250px width=300px}
+
+</p>
+
+Une carte peut être associée permettant de situer les zones d’emploi en fonction de leurs caractéristiques (HH signifie un salaire élevé dans un environnement élevé, HL un salaire élevé dans un environnement plus bas). Elle permet de constater que cette relation n’est pas homogène sur le territoire. Nous observons ainsi un cluster riche significatif en Ile de France et un cluster pauvre significatif en Auvergne. 
+
+## Modèles 
+
+Nous cherchons à expliquer les transactions en fonction des modèles estimés. L’hypothèse initiale que nous formulons à propos de cette relation est que les transactions n’expliquent pas nécessairement les salaires. En ce sens, nous nous attendons à obtenir des coefficients très faibles.
+
+Par ailleurs, les résultats obtenus montrent que les erreurs du modèle OLS ne sont pas indépendantes spatialement, ce qui constitue une violation de l’hypothèse classique d’indépendance des erreurs dans les moindres carrés ordinaires (MCO). C’est pourquoi il est essentiel d’avoir recours à des modèles spatiaux tels que le SAR, le SEM ou encore le SDM.
+
+Le modèle SAR:\textit{Spatial Autoregressive Model} postule que la valeur de la variable dépendante $y$ dans une unité géographique dépend directement des valeurs de $y$ dans les unités voisines. Il modélise donc une interdépendance spatiale dans la variable expliquée.
+
+Le modèle SEM: \textit{Spatial Error Model} considère que l’autocorrélation spatiale provient d’omissions dans les variables explicatives, captées dans le terme d’erreur $u$. L’influence spatiale se manifeste donc dans les erreurs et non directement sur $y$.
+
+Le modèle SDM:\textit{Spatial Durbin Model}est une généralisation du modèle SAR. Il suppose à la fois une dépendance spatiale dans la variable dépendante $y$ et dans les variables explicatives $X$ des unités voisines (via $WX$). Ce modèle permet ainsi d’analyser les effets directs qui sont propres à chaque zone d’emploi mais aussi les effets indirects provenant des zones voisines sur les niveaux des salaires.
+
+\[
+Y = \rho W Y + X \beta + W X \gamma + \varepsilon
+\]
+
+où :
+\begin{itemize}
+  \item $Y$ est le vecteur des salaires moyens par zone d’emploi,
+  \item $W Y$ représente l’influence des salaires voisins (effet spatial sur la variable dépendante),
+  \item $X$ contient les variables explicatives locales (propres à chaque zone),
+  \item $W X$ contient les mêmes variables, mais pour les zones voisines (effets indirects),
+  \item $\rho$, $\beta$, $\gamma$ sont les coefficients à estimer,
+  \item $\varepsilon \sim \mathcal{N}(0, \sigma^2 I)$ est le terme d’erreur, supposé normal et homoscédastique.
+\end{itemize}
+
+![Comparaison des 3 modèles ](images/image12.png){width=70%}
+
+
+Nous avons donc estimé plusieurs modèles spatiaux. Les coefficients associés à log(transactions) sont tous significatifs. Cette analyse permet de comparer les 3 modèles.
+
+Comme anticipé, le modèle OLS présente la plus faible qualité d'ajustement, avec la valeur de l’AIC la plus élevée et le $R^2$ le plus bas. Le modèle SAR améliore légèrement ces résultats, mais ce sont les modèles SEM et SDM qui affichent les meilleures performances, avec des AIC plus faibles et des $R^2$ plus élevés.
+
+Se pose alors la question du choix du modèle. Étant donné que le SDM est le modèle le plus général (il englobe SAR et SEM comme cas particuliers), nous avons souhaité vérifier s’il pouvait être simplifié en un modèle SAR. Pour cela, nous avons effectué un test du rapport de vraisemblance (LR test) avec les hypothèses suivantes :
+
+\[
+\left\{
+\begin{array}{ll}
+H_0 : & \text{le modèle restreint est vrai
+} \\
+H_1 : & \text{le modèle non restreint est vrai
+}
+\end{array}
+\right.
+\]
+
+Nous obtenons une p-value de 4.861e-05, qui est bien inférieure à 0.05. Cela signifie que, pour un seuil de 5 %, nous rejettons $H_0$. En d'autres termes, la variable explicative "log_transaction" a un effet significatif sur la variable "log_salaire", et il est donc pertinent de conserver le modèle SDM. Ce modèle présente également une AIC plus faible et un $R^2$ plus élevé que les autres modèles.
+
+Le choix entre le modèle SDM et le modèle SEM est plus délicat. Nous avons d’abord effectué le test de Moran sur les résidus du modèle SDM : la p-value très élevée indique que nous ne rejettons pas l’hypothèse d’absence d’autocorrélation, ce qui signifie que les résidus ne sont pas spatialement autocorrélés. Cela suggère que le SDM capture correctement la structure spatiale des données.
+
+Cependant, nous avons également comparé les résidus du modèle SDM à ceux du modèle SEM (Annexe 3). Nous trouvons une corrélation très proche de 1 ($\rho=0.9975$), ce qui montre que les résidus des deux modèles sont très similaires. De plus, leurs AIC sont proches. Malgré cela, le SDM reste un choix cohérent, car il permet de prendre en compte à la fois les effets directs et indirects.
+
+Nous avons pris la decision de garder le modele SDM car il est particulièrement adapté à notre problématique, il permet ainsi de capturer  aussi bien les effets des salaires des zones voisines (les effets spatiaux sur la variable dépendante) mais également les effets des caractéristiques des zones voisines (effets spatiaux sur les variables explicatives).
+
+## Application et Résultats
+
+Nous avons estimé trois versions du modèle SDM à l’aide des matrices de pondération construites par différentes méthodes : contiguïté, KNN, distance. Le choix du nombre de voisins optimal s’est porté à 5 et à 8, (Annexe 4, Annexe 5) qui a été sélectionné avec le critère AIC.
+
+
+![Modèle SDM diffents matrice avec plusieurs variable explicative ](images/image13.png){width=100%}
+![Modèle SDM diffents matrice avec une variable explicative ](images/image23.png){width=100%}
+
+Le modèle SDM basé sur la matrice des 5 voisins les plus proches a ici donné les meilleurs résultats (meilleur coefficient $\rho$ pour l’ajustement global), ce qui en fait donc le modèle qui a été retenu pour la suite de notre analyse. Ce modèle permet donc de mieux comprendre les dynamiques salariales qui sont structurées géographiquement notamment avec les effets des zones d’emplois qui se partagent.
+
+
+## Interprétation Economique 
+
+À travers les différentes sorties réalisées en amont nous pouvons constater que la réalisation du modèle SDM expliquant le log(salaire) par le log(transaction) a donné un effet direct positif et significatif démontrant qu'une hausse des mutations dans une zone d'emploi sera corrélée à une hausse des salaires (attractivité économique). En revanche, son effet indirect (spatial) est signifcatif et négatif indiquerait qu'une augmentation des transactions dans les zones voisines concurencerait la zone locale (les zones voisines prennent une part du dynamisme).
+À l'inverse lorsque nous intégrons plusieurs autres variables explicatives dans notre modèle SDM force est de constater que la variable log(transaction) perd en significativité démontrant l'effet qui à été purgé pour cette variable. Cette variable est donc la combinaison de plusieurs variables explicatives qui à elle seule perd en influence.
+
+ 
+L’analyse économétrique vise a tirer parti du lien entre le salaire dans les zones d’emploi à travers les mutations. En parallèle de cela deux variables structurelles ont été introduites dans le modèle soit le chômage et la densité d’emploi afin de mieux capter les dynamismes socio-économiques locaux. Parmi les 4 configurations établies, nous pouvons remarquer que tous les coefficients de dépendance spatialen(rho) sont élevés et significatifs.
+
+Cela confirme notre hypothèse initiale de présence d’autocorrélation spatiale dans les salaires selon laquelle des niveaux de salaires similaires tendent à se regrouper géographiquement. De plus, en tirant profit de ces informations nous pouvons constater que les inégalités salariales s’inscrivent dans des dynamiques régionales. Cette observation reste cohérente avec la géographie économique notamment avec l’idée selon laquelle le marché du travail s’étend au-delà des frontières administratives.
+
+Nous pouvons constater que le log du nombre de mutations qui reflète la pérennité résidentielle et économique d’une zone d’emploi n’est jamais significatif dans les 4 modèles estimés avec un effet positif proche de zéro mais non significatif. Cette absence de significativité peut être déterminée par un effet marginal moins puissant dans le modèle ou encore que les mutations reflètent plutôt la mobilité résidentielle à l’affluence économique. De même, son effet spatial est également non significatif traduisant le fait que les dynamiques des mutations voisines n’influencent par directement les salaires locaux.
+
+La variable log emploi représentant le logarithme du nombre d’emplois dans la zone est hautement significative et positive pour l’ensemble des modèles. Ce résultat traduit un effet d’agglomération économique avec l’idée que plus une zone concentre des emplois alors plus la zone d’emploi est susceptible de proposer des salaires élevés. Ce phénomène se justifiant par une augmentation de la productivité et a pour but d'attirer des entreprises à plus forte valeur ajoutée. En revanche son effet spatial est non significatif montrant que les zones voisines n’ont pas d’influences significatives via leur niveau d’emploi confirmant ainsi que les effets d’agglomération sont plutôt locaux.
+
+La variable chômage quant à elle est systématiquement négative mais également significative pour l’ensemble des modèles. Ce résultat est économiquement attendu en effet un chômage plus élevé aura tendance à tirer les salaires vers le bas et pouvant signaler une fragilité structurelle de l’économie locale. En revanche son effet spatial est positif et significatif ce qui signifie que le chômage dans les zones voisines augmente les salaires dans la zone locale. Un effet de rareté relative peut alors être envisagé où une zone peu touchée par le chômage devient attractive ce qui va augmenter la pression sur les salaires.
+
+Le modèle basé sur la matrice KNN à 5 voisines présente le meilleur ajustement global car il possède l’AIC le plus faible et le $R^2$ le plus élevé. Ainsi il capte de manière efficace les dynamiques spatiales proches et localisées. Cela montre l’importance de prendre en considération la dimension spatiale dans l’analyse des salaires qui révèlent que les zones à forte densité d’emploi rémunèrent mieux, le chômage local freine les salaires et les mutations ne semblent pas un moteur des salaires.  En somme, les caractéristiques des voisins influencent les rémunérations au-delà des effets locaux.
+
+## Variance Expliquée de notre modéle : Interprétation des effets spatiaux
+
+La mesure des impacts dans le modèle SDM permet de quantifier de manière précise l’influence de nos variables explicatives en distinguant l’apport de l’effet propre à la zone d’emploi (effet direct) de celui provenant des zones d’emploi voisines (effet indirect). Ces deux effets combinés constituent l’effet total qui représente l’impact global d’une variable sur le salaire.
+
+Le tableau suivant présente donc les effets estimés pour nos trois variables de notre modèle : le log du nombre de transaction, le log de l’emploi et le taux de chômage.
+
+![Effets directs, indirects et total](images/IMAGE14.png){width=80%}
+
+
+La variable log(transaction) permet de mesurer l’intensité des mutations dans une zone d’emploi ,son effet direct est quasiment nul suggérant que les transactions locales ont un faible impact sur les salaires locaux. Cependant son effet indirect est négatif indiquant que les mutations dans des zones voisines réduisent le salaire dans la zone locale. Cet effet peut-être associé à une concurrence territoriale : si des zones proches sont plus attractives alors cela peut diminuer la part de main d’œuvre qualifiée entrainant une pression à la baisse sur le marché du travail et ainsi sur les salaires. Son effet total est donc légèrement négatif ce qui renforce l’idée que les mutations surtout indirectes peuvent jouer dans la dynamique salariale.
+
+Pour notre variable log(Emploi)  elle mesure la densité d’emplois dans la zone qui présente des effets plus marqués dans le modèle. Son effet direct est positif montrant que pour une zone qui concentre beaucoup d’emplois alors cette zone d’emploi se verra proposer des salaires importants. Ce résultat suit la logique des effets où la concentration de l’activité économique est favorisée par la productivité et les gains au niveau des salaires. De même il vient également un effet indirect plus important révélant que les zones d’emploi voisines avec une forte densité d’emplois augmentent les salaires locaux. Ce phénome est tiré par des travailleurs qui peuvent vivre dans une zone d’emploi et travailler dans une autre zone d’emploi ou encore par des entreprises qui tirent profit des réseaux d’activités environnants.
+ 
+Enfin notre variable sur le taux de chômage agit comme un facteur mettant une pression à la baisse sur les salaires. Son effet direct est négatif signifiant que pour une zone d’emploi, si nous avons un chômage plus élevé il sera alors associé à des salaires plus faibles. Ce lien sous-jacent traduit un déséquilibre de l’offre et de la demande (plus de main d’œuvre limite les négociations salariales). À l’inverse son effet indirect est légèrement positif suggérant qu’un chômage de plus grande ampleur dans les zones voisines pourrait avoir une effet positif sur les salaires locaux.  La zone d’emploi locale agirait comme un affluant économique bénéficiant aux entreprises et aux travailleurs en difficulté.
+ 
+Ces résultats soulignent l’intérêt de la modélisation du modèle SDM qui permet ainsi de dissocier les effets propres d’une zone à ceux des zones voisines. Cela met en évidence l’intégration des interactions spatiales pour la compréhension des dynamiques salariales.
+ 
+
+## Analyse des Résidus du modèle SDM
+
+Afin de vérifier la conformité de notre modèle spatial il convient d’analyser les résidus,  dans le cadre de notre étude, la distribution des résidus du modèle SDM est réalisée à partir de la matrice de voisinage KNN(k=5)
+
+![Histogramme des résidus](images/IMAGE16.png){width=50%}
+![QQ-plot des résidus](images/IMAGE17.png){width=50%}
+
+
+L’histogramme des résidus et de la densité de la loi normale montre que la distribution des résidus est plutôt centrée autour de zéro ce qui pourrait indiquer une absence de biais systématique dans les prédictions. En revanche la forme de la distribution a tendance à s’écarter de la loi normale notamment avec plus de valeurs extrêmes. Notre analyse est confirmée à travers le QQ-plot dans lequel nous remarquons que la majorité des points suivent la droite mais les écarts s’accentuent aux extrémités montrant une déviation aux queues extrêmes par rapport à la distribution normale. Ces observations suggèrent que les résidus ne suivent pas une loi normale. Ce diagnostic se confirme avec un test de normalité de Shapiro-Wilk avec lequel nous observons une p-value inférieure à $1%$ ( Annexe 6). Cela implique un rejet de l’hypothèse nulle de la normalité des résidus.
+
+
+Nous constatons que les résidus ne sont pas normaux même si le fait qu’ils sont centrés autour de zéro indique que le modèle ne présente pas de biais dans ses prédictions salariales. Dit autrement le modèle ne surestime ni ne sous-estime les valeurs de la variable dépendante. 
+
+Le test de Breusch-Pagan sur les résidus du modèle SDM est réalisé avec la matrice des 5 voisins.
+
+\[
+\left\{
+\begin{array}{ll}
+H_0 : & \text{Homoscédasticité des résidus (la variance des erreurs est constante)} \\
+H_1 : & \text{Hétéroscédasticité des résidus (la variance dépend des variables explicatives)}
+\end{array}
+\right.
+\]
+
+![Test de Breush-Pagan](images/IMAGE21.png){height=100px width=550px}
+
+Ce test permet d’évaluer la variance de nos résidus en fonction des valeurs prises des variables explicatives. Si nous fixons un seuil de 5% avec notre  statistique de test  qui présente une p-value de 10.96% alors nous ne pourrons pas rejeter l’hypothèse nulle d’homoscédasticité. Ainsi les erreurs du modèle ne présentent pas de variance liée nécessairement aux variables explicatives. Cette absence d'hétéroscédasticité suggère que notre modèle ne possède pas de biais de dispersion ce qui renforce la robustesse des estimations et la fiabilité de nos conclusions économiques.
+
+## Cartographie des Résidus 
+
+![Annexe1](images/IMAGE19.png){width=50%}
+![Annexe1](images/IMAGE20.png){width=50%}
+
+ L’analyse spatiale des résidus nous permet de visualiser la qualité des prédictions de notre modèle au niveau national. Nous avons donc comparé les résidus issus du modèle linéaire avec ceux du modèle SDM toujours estimé à partir d’une matrice de voisinage KNN.
+ 
+Sur la carte des résidus du modèle OLS, nous pouvons visualiser une concentration spatiale qui montre la présence d’autocorrélation spatiale qui n’a pas été prise en compte. Ce modèle néglige ici la dépendance entre zones voisines ce qui pourrait générer des erreurs localisées.
+
+A l’inverse la carte des résidus du modèle SDM montre une nette amélioration avec des écarts qui sont moins extrêmes et moins concentrés géographiquement. Cela montre une réduction des zones avec des fortes erreurs et prouve que le modèle SDM corrige les biais spatiaux qui ont été constatés dans le modèle OLS.
+
+La carte des résidus met en évidences que le modèle SDM surpasse le modèle OLS pour réduire les erreurs spatiales ce qui justifie pleinement le recours à l’économétrie spatiale. Le modèle spatial intègre des dépendances permettant de réduire l’autocorrélation spatiale dans les résidus.
+
+
+## Transactions expliquées par les salaires
+
+N’ayant pas obtenu de résultats concluants lors de nos premières estimations, nous avons pris la décision d’inverser la relation analysée. Nous avons donc cherché à examiner dans quelle mesure les transactions immobilières pouvaient être expliquées par les salaires moyens, ainsi que par d’autres variables explicatives d’ordre socio-économique.
+
+Les tableaux ci-dessous présentent les résultats de ces nouvelles estimations à l’aide d’un modèle spatial Durbin (SDM), en tenant compte de la structure socio-professionnelle des zones d’emploi, du salaire moyen, et du taux de chômage.
+
+![](images/lala2.jpg)
+
+
+Notre analyse permet de constater un coefficient direct de log(salaire) fortement positif et significatif indiquant que dans une zone locale, une hausse des salaires sera associée à une forte augmentation de changement de propriétaires. Un haut salaire peut refléter un environnement économique sain ce qui pourrait stimuler les changements résidentiels.
+Son effet indirect de log(salaire) est également significatif et négatif montrant que si des zones voisines tendent à avoir des salaires élevés cela diminuerait les transactions locales. Si les zones voisines ont des salaires élevés, elles pourraient attirer les ménages au détriment de la zone locale. De plus les ménages peuvent préférer déménager vers des zones voisines qui rémunèrent mieux et cela pourrait réduire la pression sur le marché immobilier et dégrader l’attractivité immobilière locale.
+Au premier abord, nous pourrons montrer que le salaire est un facteur des transactions immobilières locales avec des conditions économiques des territoires voisins jouant un rôle de concurrence importante.
+
+![](images/lala1.jpg)
+
+Nous pouvons constater que le coefficient direct associé à log(salaire) n’est jamais significatif pour les 4 matrices de voisinages. Dans ce modèle le salaire horaire n’a pas d’effet direct sur le niveau des mutations immobilières dans une zone d’emploi. Une première intuition suggère que ce ne sont pas les salaires qui visent à expliquer les transactions immobilières.
+
+
+Les autres résultats permettent de constater que la densité d’emploi est un déterminant important des transactions immobilières dû à sa significativité et son fort coefficient. Cela confirmerait le rôle des bassins économiques dans les dynamiques des résidences. De plus son effet indirect négatif peut être vu comme une concurrence territoriale où une zone voisine dynamique peut dissuader la mobilité de la zone locale.
+
+La variable log(salaire) ne semble pas influencer directement ou même spatialement le niveau des transactions immobilières pouvant être traduit par le fait que les salaires influencent le type de logement mais pas le volume des transactions.
+
+Quant à la variable chômage avec un effet direct positif et un effet indirect négatif, cela renforce notre idée d’une plus forte instabilité résidentielle ce qui peut provoquer des changement de résidences liés à la pression du marché immobilier. De plus, une zone d’emploi entourée d’un fort taux de chômage pourrait affaiblir la demande immobilière locale et donc générer un effet de déprime. Cela pourrait même envoyer un message fort aux investisseurs et aux ménages qui peuvent craindre une dévalorisation immobilière dans la zone locale. Les dynamiques immobilières sont dans un tissu géographique connecté ensemble.
+
+Nos résultats montrent que le salaire, pris isolément, présente un lien significatif et positif avec le nombre de transactions immobilières. Toutefois, lorsqu'e nous introduisons dans le modèle d'autres variables structurelles comme le chômage ou la densité d’emploi, cet effet disparaît totalement. Ce résultat suggère que le salaire n’est pas, à lui seul, un déterminant direct des mutations immobilières.
+
+## Conclusion
+
+L’ensemble de nos analyses menées au cours de ce travail a permis de confirmer la pertinence du recours à l’économétrie spatiale pour expliquer les disparités des salaires à l’échelle des zones d’emplois de la France. Lorsque nous nous sommes intéressés au lien entre le nombre de logements changeant de propriétaires et le salaire net notre étude a montré des résultats nuancés.
+Avec l’utilisation du modèle spatial SDM qui a permis d’intégrer des effets locaux mais également ceux des zones voisines, cela a permis de capturer non seulement l’effet direct d’un changement dans une zone mais également l’effet indirect des dynamiques des zones limitrophes. Nos résultats montrent une forte autocorrélation spatiale justifiant le non recours à la modélisation OLS. Les effets spatiaux estimés attestent que les niveaux de salaires ne peuvent pas être considérés pleinement.
+Les résultats indiquent que si les mutations immobilières sont faiblement explicatives du salaire local, une fois d’autres variables de contrôles incluses, elles présentent néanmoins un effet indirect négatif significatif qui peut être illustré par une forme de concurrence territoriale . À l’inverse, l’emploi apparait comme un facteur déterminant de structures salariales, quant au taux de chômage son effet direct est logiquement négatif mais son effet indirect suggère un phénomène de rareté et d’attractivité locale.
+Au-delà des apports empiriques apportés, cette étude s’interroge sur des dimensions fondamentales de la géographie économique telle que l’attractivité résidentielle comme vecteur de développement économique ou la capacité des territoires à générer et redistribuer des richesses.
+Ces résultats ouvrent des pistes de réflexion pour les politiques publiques visant à réduire les inégalités territoriales. Des actions  ciblées pour développer l'emploi qualifié et diversifier l'économie dans les zones défavorisées pourraient contribuer à réduire les écarts salariaux. 
+En outre, notre étude souligne la complexité des dynamiques spatiales qui façonnent les rémunérations salariales en France. Elle invite à une réflexion nuancée sur les politiques de développement territorial, prenant en compte les spécificités locales et les interdépendances régionales.
+
+\newpage
+
+# Bibliographie
+
+**Livres articles :**
+
+::: {#refs}
+:::
+
+Cours Panel Master ESA M1 C.Rault (2024)
+
+Cours Series temporelles Master ESA M1 G. De Truchis (2024)
+
+**Sitographie :**
+
+Voici les liens de nos différentes sources de données :
+
+[Indicateur Immobilier](https://www.data.gouv.fr/fr/datasets/indicateurs-immobiliers-par-commune-et-par-annee-prix-et-volumes-sur-la-periode-2014-2023/#/resources)
+[Indice salaires](https://dares.travail-emploi.gouv.fr/donnees/les-indices-de-salaire-de-base)
+[Carte ZE](https://www.insee.fr/fr/information/4652957)
+[SNHM 2022](https://www.insee.fr/fr/statistiques/2021266)
+[Emploi localisé](https://www.insee.fr/fr/statistiques/7727476?sommaire=4981513)
+[Chomage ZE](https://www.insee.fr/fr/statistiques/1893230)
+[IPC](https://www.insee.fr/fr/statistiques/serie/010534844)
+
+L'ensemble de nos données proviennent du site de l'[INSEE](https://www.insee.fr/fr/accueil) et des données fournies.
+
+Dimension temporelle :
+
+- https://stats.stackexchange.com/questions/97783/understanding-vec2var-conversion-in-r
+- https://www.rdocumentation.org/
+- https://www.ibm.com/fr-fr/think/topics/autocorrelation#:~:text=La%20fonction%20d'autocorr%C3%A9lation%20partielle,entre%20elles%20n'expliquent%20pas.
+- https://www.r-bloggers.com/2021/11/granger-causality-test-in-r-with-example/
+- https://www.r-econometrics.com/timeseries/irf/
+- https://www.quantstart.com/articles/Johansen-Test-for-Cointegrating-Time-Series-Analysis-in-R/
+- https://www.aptech.com/blog/how-to-interpret-cointegration-test-results/
+- https://bookdown.org/jarneric/econometrics/9.2-cointegration.html
+
+\newpage
+
+# Annexe
+
+```{r echo=FALSE}
+df_salaires=df_salaires[-1]
+df_salaires=df_salaires[-25]
+df_salaires1=df_salaires[1:6]
+df_salaires2=df_salaires[7:12]
+df_salaires3=df_salaires[13:18]
+df_salaires4=df_salaires[19:24]
+kable(summary(df_salaires1), caption = "Focus sur les Salaires Nets Horaires Moyens par Sexe, CSP et Tranche d'Age")
+kable(summary(df_salaires2))
+kable(summary(df_salaires3))
+kable(summary(df_salaires4))
+```
+
+## Dimension temporelle
+
+```{r include=FALSE}
+# Tests PP
+pp_salaires_niv <- pp.test(salaires)
+pp_transactions_niv <- pp.test(transactions)
+pp_salaires_diff <- pp.test(diff(salaires))
+pp_transactions_diff <- pp.test(diff(transactions))
+
+# Tests ADF
+adf_salaires_niv <- adf.test(salaires)
+adf_transactions_niv <- adf.test(transactions)
+adf_salaires_diff <- adf.test(diff(salaires))
+adf_transactions_diff <- adf.test(diff(transactions))
+
+# Construction du tableau
+pvalues_df <- data.frame(
+  Série = c("Salaires (niveau)", "Transactions (niveau)",
+            "Salaires (diff)", "Transactions (diff)"),
+  `p-value PP` = c(pp_salaires_niv$p.value,
+                   pp_transactions_niv$p.value,
+                   pp_salaires_diff$p.value,
+                   pp_transactions_diff$p.value),
+  `p-value ADF` = c(adf_salaires_niv$p.value,
+                    adf_transactions_niv$p.value,
+                    adf_salaires_diff$p.value,
+                    adf_transactions_diff$p.value)
+)
+colnames(pvalues_df) <- c("Série", 
+                       "p value PP", 
+                       "p value ADF")
+```
+
+```{r echo=FALSE}
+# Affichage propre
+kable(pvalues_df, digits = 4, caption = "P-values des tests PP et ADF")
+```
+
+## Panel
+
+```{r}
+ggplot(panel, aes(annee, log_mutations, group = dep)) +
+  geom_line(alpha = .15) +
+  labs(title = "Variation log mutations / Departement")+ggplot(panel, aes(annee, log_sal, group = dep)) +
+  geom_line(alpha = .15) +
+  labs(title = "Variation log sal / Departement")
+```
+```{r results = "asis"}
+a = vif(lm(log_mutations ~ log_sal + p_Industrie + p_Tertiaire + p_Agriculture + p_Construction + Chomage +part_25_39 + propmaison + log_prixm2 +log_pop + log_tout_emploi, data =base))
+kable(a, caption = "VIF Panel")
+```
+
+```{r results = "asis"}
+kable(panel %>%
+  group_by(annee) %>%
+  summarise(corr = cor(log_mutations, log_sal)), caption = "Correlations salaire mutations au cours des années")
+```
+
+RURAL VS NON-RURAL :
+
+![Analyse modele rural](images/rural1.png){height=150px width=120px}
+
+![Analyse modele non rural](images/rural2.png){height=150px width=120px}
+
+Modele enrichi Salaires ~ Mutations
+
+Les graphiques et tests :
+
+![Analyse résidus du modèle enrichi](images/residus4.png){height=300px width=600px}
+
+```{r results="asis"}
+kable(data.frame("Stat test" = c(386.53,0.77),"p-value" = c(0,0),"Test" = c("Breusch-Pagan","Shapiro-Wilk normality")), caption = "Variables en niveau")
+```
+
+![Analyse résidus du modèle enrichi diff](images/residus5.png){height=300px width=600px}
+
+```{r results="asis"}
+kable(data.frame("Stat test" = c(71,0.53),"p-value" = c(0,0),"Test" = c("Breusch-Pagan","Shapiro-Wilk normality")), caption = "Variables en différence première")
+```
+
+![Analyse résidus modèle ECM](images/ressal1.png){height=150px width=300px}
+![Analyse QQ modèle ECM](images/ressal2.png){height=150px width=300px}
+
+```{r results='asis'}
+T <- 9
+Y <- matrix(panel$log_mutations, nrow = T)
+X <- matrix(panel$log_sal,       nrow = T)
+
+ped <- pedroni99(
+  Y         = Y,
+  X         = X,
+  type.stat = 3,
+  ka        = 2 
+)
+
+kable(data.frame(ped$STATISTIC), caption = "Test Pedroni Cointegration Panel")
+```
+
+![Estimation du modele ECM simple](images/sal_mut.png){height=100px width=300px}
+
+Modele enrichi Mutations ~ Salaires 
+
+Les graphiques  et tests :
+
+![Analyse résidus modèle enrichi](images/residus2.png){height=300px width=600px}
+
+
+```{r results="asis"}
+kable(data.frame("Stat test" = c(41.431,0.87),"p-value" = c(0,0),"Test" = c("Breusch-Pagan","Shapiro-Wilk normality")), caption = "Variables en niveau")
+```
+
+![Analyse résidus modèle enrichi diff](images/residus3.png){height=300px width=600px}
+
+```{r results="asis"}
+kable(data.frame("Stat test" = c(72.724,0.81),"p-value" = c(0,0),"Test" = c("Breusch-Pagan","Shapiro-Wilk normality")), caption = "Variables en différence première")
+```
+
+![Analyse résidus du modèle ECM](images/resmut1.png){height=150px width=300px}
+![Analyse QQ du modèle ECM](images/resmut2.png){height=150px width=300px}
+
+```{r}
+library(pco)
+Y <- matrix(panel$log_mutations, nrow = length(unique(panel$annee)))
+X <- matrix(panel$log_sal,       nrow = length(unique(panel$annee)))
+ped <- pedroni99(Y, X, type.stat = 2, ka = 2)
+kable(data.frame(ped$STATISTIC)[-2,],caption = "Test Cointegration Panel ECM mut-sal")
+```
+
+![Estimation du modele ECM simple](images/mut_sal.png){height=100px width=300px}
+
+
+## Modèle Spatial
+
+![Annexe1](images/IMAGE2.png){width=80%}
+
+![Annexe2 ](images/IMAGE5.png){width=80%}
+
+![Annexe3 ](images/image_annexe1.png){width=80%}
+
+![Annexe4 ](images/IMAGE8.png){width=80%}
+
+![Annexe5 ](images/IMAGE7.png){width=80%}
+
+![Annexe6 ](images/IMAGE22.png){width=80%}
+
+![Annexe7](images/image25.png)
+
+![Annexe 8](images/lala3.jpg)
+
+
+
+
+
+
+
+
+
